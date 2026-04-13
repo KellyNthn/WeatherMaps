@@ -46,8 +46,8 @@
       transition: background 0.2s;
     }
 
-    .map-btn:hover   { background: #0f3460; }
-    .map-btn.active  { background: #0f3460; color: #fff; border-color: #4fc3f7; }
+    .map-btn:hover  { background: #0f3460; }
+    .map-btn.active { background: #0f3460; color: #fff; border-color: #4fc3f7; }
 
     /* ── ZOOM CONTROLS ── */
     .zoom-controls {
@@ -72,7 +72,7 @@
 
     .zoom-btn:hover { background: #0f3460; }
 
-    /* ── IFRAME WRAPPER ── */
+    /* ── MAIN CONTENT AREA ── */
     .chart-container {
       flex: 1;
       position: relative;
@@ -88,8 +88,51 @@
       transition: transform 0.2s ease;
     }
 
-    /* ── TOUCH SCROLL OVERLAY ── */
-    /* Captures touch events and translates them to mouse events Plotly understands */
+    /* ── LANDING PAGE ── */
+    #landing {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+    }
+
+    .landing-card {
+      max-width: 640px;
+      width: 100%;
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 16px;
+      padding: 40px;
+    }
+
+    .landing-card h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #4fc3f7;
+      margin-bottom: 16px;
+    }
+
+    .landing-card p {
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: #ccc;
+      margin-bottom: 14px;
+    }
+
+    .landing-card p:last-child { margin-bottom: 0; }
+
+    .landing-card .hint {
+      margin-top: 28px;
+      padding: 12px 16px;
+      background: #0f3460;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #aac4ff;
+    }
+
+    /* ── TOUCH OVERLAY ── */
     .touch-overlay {
       position: absolute;
       inset: 0;
@@ -108,34 +151,61 @@
   <nav>
     <h1>Weather Maps</h1>
 
-    <!-- Add more buttons here as you add more plots -->
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="map-btn active" onclick="loadMap('bear_lake_area.html', this)">WRF Trails</button>
-      <!-- Future maps — uncomment and update src as you add them:
+      <button class="map-btn" onclick="loadMap('bear_lake_area.html', this)">WRF Trails</button>
+      <!-- Add more map buttons here as you add plots:
       <button class="map-btn" onclick="loadMap('map2.html', this)">Map 2</button>
-      <button class="map-btn" onclick="loadMap('map3.html', this)">Map 3</button>
       -->
     </div>
 
     <div class="zoom-controls">
       <button class="zoom-btn" onclick="adjustZoom(-0.1)" title="Zoom out">−</button>
-      <button class="zoom-btn" onclick="resetZoom()"    title="Reset zoom">⌂</button>
+      <button class="zoom-btn" onclick="resetZoom()"     title="Reset zoom">⌂</button>
       <button class="zoom-btn" onclick="adjustZoom(+0.1)" title="Zoom in">+</button>
     </div>
   </nav>
 
   <div class="chart-container">
-    <iframe id="plotly-frame" src="wrf_trails_3d_utm_animated_small.html"></iframe>
+
+    <!-- LANDING PAGE — shown on load, hidden when a map is selected -->
+    <div id="landing">
+      <div class="landing-card">
+        <h2>Welcome to Weather Maps</h2>
+
+        <!-- ✏️ Edit the text below to describe your site -->
+        <p>
+          This site hosts interactive 3D weather visualizations generated from
+          WRF (Weather Research and Forecasting) model output for the Colorado Front Range.
+        </p>
+        <p>
+          Each map shows simulated atmospheric trajectories and wind patterns
+          rendered as animated 3D trails. Use the controls inside each map to
+          play, pause, and scrub through time.
+        </p>
+
+        <div class="hint">
+          Select a map from the navigation bar above to get started.
+          On mobile, drag to pan and pinch to zoom.
+        </div>
+      </div>
+    </div>
+
+    <!-- IFRAME — hidden until a map button is clicked -->
+    <iframe id="plotly-frame" src="about:blank" style="display:none;"></iframe>
     <div class="touch-overlay" id="touch-overlay"></div>
+
   </div>
 
   <script>
     const frame   = document.getElementById('plotly-frame');
+    const landing = document.getElementById('landing');
     const overlay = document.getElementById('touch-overlay');
     let scale = 1.0;
 
     /* ── MAP SWITCHING ── */
     function loadMap(src, btn) {
+      landing.style.display = 'none';
+      frame.style.display   = 'block';
       frame.src = src;
       document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -160,15 +230,7 @@
       applyZoom();
     }
 
-    /* Desktop scroll-to-zoom on the nav bar zoom buttons is above.
-       For pinch-to-zoom on mobile, we let the browser handle it
-       via the meta viewport — Plotly's own pinch zoom works fine
-       once touch events reach the iframe. The overlay below
-       handles pan (drag) forwarding only. */
-
     /* ── TOUCH PAN FORWARDING ── */
-    /* Translates finger drag on the overlay into synthetic mouse
-       events dispatched into the iframe's Plotly figure */
     let lastTouch = null;
 
     overlay.addEventListener('touchstart', e => {
@@ -185,7 +247,7 @@
       }
     }, { passive: true });
 
-    overlay.addEventListener('touchend', e => {
+    overlay.addEventListener('touchend', () => {
       if (lastTouch) {
         dispatch('mouseup', lastTouch);
         lastTouch = null;
@@ -205,9 +267,7 @@
             clientX: x, clientY: y
           }));
         }
-      } catch(err) {
-        /* Cross-origin iframe — touch forwarding unavailable */
-      }
+      } catch(err) { /* cross-origin — touch forwarding unavailable */ }
     }
   </script>
 
