@@ -3,23 +3,213 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Plotly Chart</title>
+  <title>Weather Maps</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: 100%;
-      height: 100%;
+
+    body {
+      font-family: sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── NAV BAR ── */
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    nav h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #e0e0e0;
+      margin-right: auto;
+    }
+
+    .map-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid #0f3460;
+      background: transparent;
+      color: #aac4ff;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .map-btn:hover   { background: #0f3460; }
+    .map-btn.active  { background: #0f3460; color: #fff; border-color: #4fc3f7; }
+
+    /* ── ZOOM CONTROLS ── */
+    .zoom-controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    .zoom-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid #0f3460;
+      background: #16213e;
+      color: #aac4ff;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .zoom-btn:hover { background: #0f3460; }
+
+    /* ── IFRAME WRAPPER ── */
+    .chart-container {
+      flex: 1;
+      position: relative;
       overflow: hidden;
     }
+
     iframe {
       width: 100%;
-      height: 100vh;
+      height: 100%;
       border: none;
       display: block;
+      transform-origin: top left;
+      transition: transform 0.2s ease;
+    }
+
+    /* ── TOUCH SCROLL OVERLAY ── */
+    /* Captures touch events and translates them to mouse events Plotly understands */
+    .touch-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      touch-action: none;
+      display: none;
+    }
+
+    @media (pointer: coarse) {
+      .touch-overlay { display: block; }
     }
   </style>
 </head>
 <body>
-  <iframe src="wrf_trails_3d_utm_animated_small.html"></iframe>
+
+  <nav>
+    <h1>Weather Maps</h1>
+
+    <!-- Add more buttons here as you add more plots -->
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="map-btn active" onclick="loadMap('bear_lake_area.html', this)">WRF Trails</button>
+      <!-- Future maps — uncomment and update src as you add them:
+      <button class="map-btn" onclick="loadMap('map2.html', this)">Map 2</button>
+      <button class="map-btn" onclick="loadMap('map3.html', this)">Map 3</button>
+      -->
+    </div>
+
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="adjustZoom(-0.1)" title="Zoom out">−</button>
+      <button class="zoom-btn" onclick="resetZoom()"    title="Reset zoom">⌂</button>
+      <button class="zoom-btn" onclick="adjustZoom(+0.1)" title="Zoom in">+</button>
+    </div>
+  </nav>
+
+  <div class="chart-container">
+    <iframe id="plotly-frame" src="wrf_trails_3d_utm_animated_small.html"></iframe>
+    <div class="touch-overlay" id="touch-overlay"></div>
+  </div>
+
+  <script>
+    const frame   = document.getElementById('plotly-frame');
+    const overlay = document.getElementById('touch-overlay');
+    let scale = 1.0;
+
+    /* ── MAP SWITCHING ── */
+    function loadMap(src, btn) {
+      frame.src = src;
+      document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      resetZoom();
+    }
+
+    /* ── ZOOM ── */
+    function applyZoom() {
+      frame.style.width          = (100 / scale) + '%';
+      frame.style.height         = (100 / scale) + '%';
+      frame.style.transform      = `scale(${scale})`;
+      frame.style.transformOrigin = 'top left';
+    }
+
+    function adjustZoom(delta) {
+      scale = Math.min(3.0, Math.max(0.4, scale + delta));
+      applyZoom();
+    }
+
+    function resetZoom() {
+      scale = 1.0;
+      applyZoom();
+    }
+
+    /* Desktop scroll-to-zoom on the nav bar zoom buttons is above.
+       For pinch-to-zoom on mobile, we let the browser handle it
+       via the meta viewport — Plotly's own pinch zoom works fine
+       once touch events reach the iframe. The overlay below
+       handles pan (drag) forwarding only. */
+
+    /* ── TOUCH PAN FORWARDING ── */
+    /* Translates finger drag on the overlay into synthetic mouse
+       events dispatched into the iframe's Plotly figure */
+    let lastTouch = null;
+
+    overlay.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) {
+        lastTouch = e.touches[0];
+        dispatch('mousedown', lastTouch);
+      }
+    }, { passive: true });
+
+    overlay.addEventListener('touchmove', e => {
+      if (e.touches.length === 1 && lastTouch) {
+        dispatch('mousemove', e.touches[0]);
+        lastTouch = e.touches[0];
+      }
+    }, { passive: true });
+
+    overlay.addEventListener('touchend', e => {
+      if (lastTouch) {
+        dispatch('mouseup', lastTouch);
+        lastTouch = null;
+      }
+    }, { passive: true });
+
+    function dispatch(type, touch) {
+      try {
+        const iframeDoc = frame.contentDocument || frame.contentWindow.document;
+        const rect      = frame.getBoundingClientRect();
+        const x         = (touch.clientX - rect.left) / scale;
+        const y         = (touch.clientY - rect.top)  / scale;
+        const el        = iframeDoc.elementFromPoint(x, y);
+        if (el) {
+          el.dispatchEvent(new MouseEvent(type, {
+            bubbles: true, cancelable: true,
+            clientX: x, clientY: y
+          }));
+        }
+      } catch(err) {
+        /* Cross-origin iframe — touch forwarding unavailable */
+      }
+    }
+  </script>
+
 </body>
 </html>
