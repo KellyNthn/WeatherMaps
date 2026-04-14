@@ -312,14 +312,14 @@
     /*
      * Strategy: simulate a mousedown at the centre of the iframe, then fire
      * mousemove events offset in the desired direction, then mouseup.
-     * Plotly interprets left-button drag as pan and right-button drag as orbit/rotate,
-     * but since we can only dispatch MouseEvents we use button=0 (left) for pan
-     * and button=2 (right) for orbit. We also set `ctrlKey` as a fallback because
-     * some Plotly builds treat ctrl+drag as rotate.
+     * Plotly 3D drag behaviour:
+     *   left-click drag            → orbit/rotate
+     *   ctrl + left-click drag     → pan
+     * So btn is always 0 (left), and ctrlKey is true only in pan mode.
      */
 
-    const STEP = 40;   // pixels per d-pad press
-    const STEPS = 8;   // how many mousemove steps per press (smoothness)
+    const STEP = 10;   // pixels per d-pad press
+    const STEPS = 2;   // how many mousemove steps per press (smoothness)
 
     function getCentre() {
       const rect = frame.getBoundingClientRect();
@@ -334,10 +334,10 @@
         const iframeDoc = frame.contentDocument || frame.contentWindow.document;
         const { x, y } = getCentre();
 
-        // For orbit, Plotly 3D uses right-click drag OR ctrl+drag
-        const isOrbit = (currentMode === 'orbit');
-        const btn     = isOrbit ? 2 : 0;
-        const ctrl    = isOrbit;
+        // Plotly 3D: left-click drag = orbit/rotate, ctrl+left-click drag = pan
+        const isPan = (currentMode === 'pan');
+        const btn   = 0;
+        const ctrl  = isPan;
 
         const el = iframeDoc.elementFromPoint(x, y);
         if (!el) return;
@@ -345,7 +345,7 @@
         const mkEvent = (type, cx, cy) => new MouseEvent(type, {
           bubbles: true, cancelable: true,
           clientX: cx, clientY: cy,
-          button: btn, buttons: isOrbit ? 2 : 1,
+          button: btn, buttons: 1,
           ctrlKey: ctrl
         });
 
