@@ -231,7 +231,7 @@
     <!-- Zoom -->
     <div class="zoom-controls" id="nav-zoom" style="display:none;">
       <button class="zoom-btn" onclick="adjustZoom(-0.1)" title="Zoom out">−</button>
-      <button class="zoom-btn" onclick="resetZoom()"      title="Reset zoom">⌂</button>
+      <button class="zoom-btn" onclick="fullReset()"      title="Reset view">⌂</button>
       <button class="zoom-btn" onclick="adjustZoom(+0.1)" title="Zoom in">+</button>
     </div>
   </nav>
@@ -266,7 +266,6 @@
     const frame   = document.getElementById('plotly-frame');
     const landing = document.getElementById('landing');
     const overlay = document.getElementById('touch-overlay');
-    let scale = 1.0;
     let currentMode = 'pan'; // 'pan' or 'orbit'
 
     /* ── MAP SWITCHING ── */
@@ -276,7 +275,6 @@
       frame.src = src;
       document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      resetZoom();
       document.getElementById('nav-mode').style.display = '';
       document.getElementById('dpad').style.display     = '';
       document.getElementById('nav-zoom').style.display = '';
@@ -290,22 +288,51 @@
       document.getElementById('dpad-label').textContent = mode === 'pan' ? 'PAN' : 'ROT';
     }
 
-    /* ── ZOOM ── */
-    function applyZoom() {
-      frame.style.width           = (100 / scale) + '%';
-      frame.style.height          = (100 / scale) + '%';
-      frame.style.transform       = `scale(${scale})`;
-      frame.style.transformOrigin = 'top left';
+    /* ── ZOOM (Plotly camera eye) ── */
+    let zoomFactor = 1.0;
+
+    function getPlotlyDiv() {
+      try {
+        return frame.contentWindow.document.querySelector('.plotly-graph-div');
+      } catch(e) { return null; }
     }
 
     function adjustZoom(delta) {
-      scale = Math.min(3.0, Math.max(0.4, scale + delta));
-      applyZoom();
+      const direction = delta > 0 ? 0.85 : 1.0 / 0.85;
+      zoomFactor = Math.min(8.0, Math.max(0.1, zoomFactor * direction));
+      const gd = getPlotlyDiv();
+      if (!gd) return;
+      try {
+        const base = 1.25;
+        const s = zoomFactor;
+        frame.contentWindow.Plotly.relayout(gd, {
+          'scene.camera.eye': { x: base / s, y: base / s, z: base / s }
+        });
+      } catch(e) { console.warn('Plotly zoom failed:', e); }
     }
 
     function resetZoom() {
-      scale = 1.0;
-      applyZoom();
+      zoomFactor = 1.0;
+      const gd = getPlotlyDiv();
+      if (!gd) return;
+      try {
+        frame.contentWindow.Plotly.relayout(gd, {
+          'scene.camera.eye': { x: 1.25, y: 1.25, z: 1.25 }
+        });
+      } catch(e) {}
+    }
+
+    function fullReset() {
+      resetZoom();
+      try {
+        const iframeDoc = frame.contentDocument || frame.contentWindow.document;
+        const { x, y } = getCentre();
+        const el = iframeDoc.elementFromPoint(x, y);
+        if (el) {
+          const opts = { bubbles: true, cancelable: true, clientX: x, clientY: y };
+          el.dispatchEvent(new MouseEvent('dblclick', opts));
+        }
+      } catch(err) { /* cross-origin */ }
     }
 
     /* ── D-PAD DRAG INJECTION ── */
@@ -318,14 +345,14 @@
      * So btn is always 0 (left), and ctrlKey is true only in pan mode.
      */
 
-    const STEP = 1;   // pixels per d-pad press
-    const STEPS = 1;   // how many mousemove steps per press (smoothness)
+    const STEP = 5;    // pixels per d-pad press
+    const STEPS = 8;   // how many mousemove steps per press (smoothness)
 
     function getCentre() {
       const rect = frame.getBoundingClientRect();
       return {
-        x: (rect.left + rect.width  / 2) / scale,
-        y: (rect.top  + rect.height / 2) / scale
+        x: rect.left + rect.width  / 2,
+        y: rect.top  + rect.height / 2
       };
     }
 
@@ -438,8 +465,8 @@
       try {
         const iframeDoc = frame.contentDocument || frame.contentWindow.document;
         const rect      = frame.getBoundingClientRect();
-        const x         = (touch.clientX - rect.left) / scale;
-        const y         = (touch.clientY - rect.top)  / scale;
+        const x         = touch.clientX - rect.left;
+        const y         = touch.clientY - rect.top;
         const el        = iframeDoc.elementFromPoint(x, y);
         if (el) {
           el.dispatchEvent(new MouseEvent(type, {
