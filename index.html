@@ -16,7 +16,6 @@
       flex-direction: column;
     }
 
-    /* ── NAV BAR ── */
     nav {
       display: flex;
       align-items: center;
@@ -49,10 +48,10 @@
     .map-btn:hover  { background: #0f3460; }
     .map-btn.active { background: #0f3460; color: #fff; border-color: #4fc3f7; }
 
-    /* ── ZOOM CONTROLS ── */
     .zoom-controls {
       display: flex;
       gap: 6px;
+      align-items: center;
     }
 
     .zoom-btn {
@@ -68,11 +67,68 @@
       align-items: center;
       justify-content: center;
       transition: background 0.2s;
+      user-select: none;
     }
 
-    .zoom-btn:hover { background: #0f3460; }
+    .zoom-btn:hover  { background: #0f3460; }
+    .zoom-btn.active { background: #0f3460; border-color: #4fc3f7; color: #fff; }
 
-    /* ── MAIN CONTENT AREA ── */
+    /* Mode toggle group */
+    .mode-group {
+      display: flex;
+      gap: 0;
+      border: 1px solid #0f3460;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .mode-btn {
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      color: #aac4ff;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      user-select: none;
+    }
+
+    .mode-btn + .mode-btn {
+      border-left: 1px solid #0f3460;
+    }
+
+    .mode-btn:hover  { background: #0f3460; }
+    .mode-btn.active { background: #0f3460; color: #fff; }
+
+    /* D-pad for pan/orbit */
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 32px);
+      grid-template-rows: repeat(3, 32px);
+      gap: 3px;
+    }
+
+    .dpad-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid #0f3460;
+      background: #16213e;
+      color: #aac4ff;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .dpad-btn:hover   { background: #0f3460; }
+    .dpad-btn:active  { background: #1a4a7a; }
+    .dpad-center      { font-size: 0.65rem; color: #667; cursor: default; }
+
     .chart-container {
       flex: 1;
       position: relative;
@@ -88,7 +144,6 @@
       transition: transform 0.2s ease;
     }
 
-    /* ── LANDING PAGE ── */
     #landing {
       width: 100%;
       height: 100%;
@@ -132,7 +187,6 @@
       color: #aac4ff;
     }
 
-    /* ── TOUCH OVERLAY ── */
     .touch-overlay {
       position: absolute;
       inset: 0;
@@ -153,26 +207,40 @@
 
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <button class="map-btn" onclick="loadMap('bear_lake_area.html', this)">WRF Trails</button>
-      <!-- Add more map buttons here as you add plots:
-      <button class="map-btn" onclick="loadMap('map2.html', this)">Map 2</button>
-      -->
     </div>
 
-    <div class="zoom-controls">
+    <!-- Mode toggle: Pan vs Orbit -->
+    <div class="mode-group" id="nav-mode" style="display:none;" title="Choose what the D-pad controls">
+      <button class="mode-btn active" id="mode-pan"   onclick="setMode('pan')">✥ Pan</button>
+      <button class="mode-btn"        id="mode-orbit" onclick="setMode('orbit')">↻ Orbit</button>
+    </div>
+
+    <!-- D-pad -->
+    <div class="dpad" id="dpad" style="display:none;">
+      <div></div>
+      <button class="dpad-btn" id="btn-up"    title="Up">▲</button>
+      <div></div>
+      <button class="dpad-btn" id="btn-left"  title="Left">◀</button>
+      <div class="dpad-btn dpad-center" id="dpad-label">PAN</div>
+      <button class="dpad-btn" id="btn-right" title="Right">▶</button>
+      <div></div>
+      <button class="dpad-btn" id="btn-down"  title="Down">▼</button>
+      <div></div>
+    </div>
+
+    <!-- Zoom -->
+    <div class="zoom-controls" id="nav-zoom" style="display:none;">
       <button class="zoom-btn" onclick="adjustZoom(-0.1)" title="Zoom out">−</button>
-      <button class="zoom-btn" onclick="resetZoom()"     title="Reset zoom">⌂</button>
+      <button class="zoom-btn" onclick="resetZoom()"      title="Reset zoom">⌂</button>
       <button class="zoom-btn" onclick="adjustZoom(+0.1)" title="Zoom in">+</button>
     </div>
   </nav>
 
   <div class="chart-container">
 
-    <!-- LANDING PAGE — shown on load, hidden when a map is selected -->
     <div id="landing">
       <div class="landing-card">
         <h2>Welcome to Weather Maps</h2>
-
-        <!-- ✏️ Edit the text below to describe your site -->
         <p>
           This site hosts interactive 3D weather visualizations generated from
           WRF (Weather Research and Forecasting) model output for the Colorado Front Range.
@@ -182,15 +250,13 @@
           rendered as animated 3D trails. Use the controls inside each map to
           play, pause, and scrub through time.
         </p>
-
         <div class="hint">
           Select a map from the navigation bar above to get started.
-          On mobile, drag to pan and pinch to zoom.
+          Use the D-pad to pan or orbit the 3D scene on touchscreens.
         </div>
       </div>
     </div>
 
-    <!-- IFRAME — hidden until a map button is clicked -->
     <iframe id="plotly-frame" src="about:blank" style="display:none;"></iframe>
     <div class="touch-overlay" id="touch-overlay"></div>
 
@@ -201,6 +267,7 @@
     const landing = document.getElementById('landing');
     const overlay = document.getElementById('touch-overlay');
     let scale = 1.0;
+    let currentMode = 'pan'; // 'pan' or 'orbit'
 
     /* ── MAP SWITCHING ── */
     function loadMap(src, btn) {
@@ -210,13 +277,24 @@
       document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       resetZoom();
+      document.getElementById('nav-mode').style.display = '';
+      document.getElementById('dpad').style.display     = '';
+      document.getElementById('nav-zoom').style.display = '';
+    }
+
+    /* ── MODE SWITCHING ── */
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('mode-pan').classList.toggle('active',   mode === 'pan');
+      document.getElementById('mode-orbit').classList.toggle('active', mode === 'orbit');
+      document.getElementById('dpad-label').textContent = mode === 'pan' ? 'PAN' : 'ROT';
     }
 
     /* ── ZOOM ── */
     function applyZoom() {
-      frame.style.width          = (100 / scale) + '%';
-      frame.style.height         = (100 / scale) + '%';
-      frame.style.transform      = `scale(${scale})`;
+      frame.style.width           = (100 / scale) + '%';
+      frame.style.height          = (100 / scale) + '%';
+      frame.style.transform       = `scale(${scale})`;
       frame.style.transformOrigin = 'top left';
     }
 
@@ -230,7 +308,109 @@
       applyZoom();
     }
 
-    /* ── TOUCH PAN FORWARDING ── */
+    /* ── D-PAD DRAG INJECTION ── */
+    /*
+     * Strategy: simulate a mousedown at the centre of the iframe, then fire
+     * mousemove events offset in the desired direction, then mouseup.
+     * Plotly interprets left-button drag as pan and right-button drag as orbit/rotate,
+     * but since we can only dispatch MouseEvents we use button=0 (left) for pan
+     * and button=2 (right) for orbit. We also set `ctrlKey` as a fallback because
+     * some Plotly builds treat ctrl+drag as rotate.
+     */
+
+    const STEP = 40;   // pixels per d-pad press
+    const STEPS = 8;   // how many mousemove steps per press (smoothness)
+
+    function getCentre() {
+      const rect = frame.getBoundingClientRect();
+      return {
+        x: (rect.left + rect.width  / 2) / scale,
+        y: (rect.top  + rect.height / 2) / scale
+      };
+    }
+
+    function injectDrag(dx, dy) {
+      try {
+        const iframeDoc = frame.contentDocument || frame.contentWindow.document;
+        const { x, y } = getCentre();
+
+        // For orbit, Plotly 3D uses right-click drag OR ctrl+drag
+        const isOrbit = (currentMode === 'orbit');
+        const btn     = isOrbit ? 2 : 0;
+        const ctrl    = isOrbit;
+
+        const el = iframeDoc.elementFromPoint(x, y);
+        if (!el) return;
+
+        const mkEvent = (type, cx, cy) => new MouseEvent(type, {
+          bubbles: true, cancelable: true,
+          clientX: cx, clientY: cy,
+          button: btn, buttons: isOrbit ? 2 : 1,
+          ctrlKey: ctrl
+        });
+
+        // mousedown at centre
+        el.dispatchEvent(mkEvent('mousedown', x, y));
+
+        // stream of mousemove events
+        for (let i = 1; i <= STEPS; i++) {
+          const cx = x + (dx / STEPS) * i;
+          const cy = y + (dy / STEPS) * i;
+          const target = iframeDoc.elementFromPoint(cx, cy) || el;
+          target.dispatchEvent(mkEvent('mousemove', cx, cy));
+        }
+
+        // mouseup at destination
+        const ex = x + dx, ey = y + dy;
+        const endEl = iframeDoc.elementFromPoint(ex, ey) || el;
+        endEl.dispatchEvent(mkEvent('mouseup', ex, ey));
+
+      } catch(err) {
+        // cross-origin — cannot inject
+        console.warn('D-pad injection failed (cross-origin?):', err);
+      }
+    }
+
+    /* Wire up d-pad buttons */
+    const dpadMap = {
+      'btn-up':    [0, -STEP],
+      'btn-down':  [0,  STEP],
+      'btn-left':  [-STEP, 0],
+      'btn-right': [ STEP, 0]
+    };
+
+    Object.entries(dpadMap).forEach(([id, [dx, dy]]) => {
+      const btn = document.getElementById(id);
+
+      // Single press
+      btn.addEventListener('click', () => injectDrag(dx, dy));
+
+      // Hold-to-repeat on touch
+      let holdTimer = null;
+      let holdInterval = null;
+
+      const startHold = () => {
+        injectDrag(dx, dy);
+        holdTimer = setTimeout(() => {
+          holdInterval = setInterval(() => injectDrag(dx, dy), 80);
+        }, 300);
+      };
+
+      const stopHold = () => {
+        clearTimeout(holdTimer);
+        clearInterval(holdInterval);
+        holdTimer = null;
+        holdInterval = null;
+      };
+
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, { passive: false });
+      btn.addEventListener('touchend',   stopHold,  { passive: true });
+      btn.addEventListener('mousedown',  startHold);
+      btn.addEventListener('mouseup',    stopHold);
+      btn.addEventListener('mouseleave', stopHold);
+    });
+
+    /* ── TOUCH PAN FORWARDING (existing, unchanged) ── */
     let lastTouch = null;
 
     overlay.addEventListener('touchstart', e => {
@@ -267,7 +447,7 @@
             clientX: x, clientY: y
           }));
         }
-      } catch(err) { /* cross-origin — touch forwarding unavailable */ }
+      } catch(err) { /* cross-origin */ }
     }
   </script>
 
