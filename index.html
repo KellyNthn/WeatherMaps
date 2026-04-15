@@ -203,10 +203,42 @@
 <body>
 
   <nav>
-    <h1>Weather Maps</h1>
+    <h1>RMNP Weather Maps</h1>
 
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="map-btn" onclick="loadMap('bear_lake_area.html', this)">WRF Trails</button>
+      <button class="map-btn" onclick="loadMap('downtown_lumpy_ridge.html', this)">Lumpy Ridge</button>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="map-btn" onclick="loadMap('lawn_lake_OFRR.html', this)">Mount Ypsilon</button>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="map-btn" onclick="loadMap('bear_lake_area.html', this)">Bear Lake Area</button>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="map-btn" onclick="loadMap('wild_basin.html', this)">Wild Basin</button>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="map-btn" onclick="loadMap('twin_sisters.html', this)">Twin Sisters</button>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="map-btn" onclick="loadMap('colorado_source.html', this)">Colorado Source</button>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="map-btn" onclick="loadMap('mount_ida.html', this)">Mount Ida</button>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+	    <button class="map-btn" onclick="loadMap('east_inlet.html', this)">East Inlet</button>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="map-btn" onclick="loadMap('south_never_summer.html', this)">Mount Nimbus</button>
     </div>
 
     <!-- Mode toggle: Pan vs Orbit -->
@@ -242,17 +274,17 @@
       <div class="landing-card">
         <h2>Welcome to Weather Maps</h2>
         <p>
-          This site hosts interactive 3D weather visualizations generated from
-          WRF (Weather Research and Forecasting) model output for the Colorado Front Range.
+          This site hosts interactive 3D weather visualizations generated with plotly from
+          WRF (Weather Research and Forecasting) model output for Rocky Mountain National Park.
         </p>
         <p>
-          Each map shows simulated atmospheric trajectories and wind patterns
-          rendered as animated 3D trails. Use the controls inside each map to
+	Maps show 10m wind and 2m temperature from a machine learning model downscaling a 1km grid spacing WRF run to 333m. Precipitation contours are from the 1km model.
+	  Use the controls inside each map to
           play, pause, and scrub through time.
         </p>
         <div class="hint">
           Select a map from the navigation bar above to get started.
-          Use the D-pad to pan or orbit the 3D scene on touchscreens.
+          Use the D-pad and zoom buttons to pan or orbit the 3D scene on touchscreens, with a mouse CTRL+right click and drag will pan, click and drag will rotate, and scroll will zoom.
         </div>
       </div>
     </div>
