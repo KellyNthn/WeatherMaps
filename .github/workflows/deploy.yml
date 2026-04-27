@@ -6,7 +6,7 @@ on:
       - main  # Change to 'master' if that's your default branch
     paths:
       - 'videos/**'
-      - 'index.html'
+      - '**.html'
 
   # Allow manual trigger
   workflow_dispatch:
