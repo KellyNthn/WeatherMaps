@@ -1,674 +1,333 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Weather Maps</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: sans-serif;
-      background: #1a1a2e;
-      color: #eee;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* ── NAV ── */
-    nav {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 16px;
-      background: #16213e;
-      border-bottom: 1px solid #0f3460;
-      flex-shrink: 0;
-      flex-wrap: wrap;
-      transition: padding 0.2s, gap 0.2s;
-    }
-
-    /* Collapsed nav: only show the toggle button */
-    nav.collapsed {
-      flex-wrap: nowrap;
-      padding: 6px 16px;
-      gap: 0;
-    }
-
-    nav.collapsed > *:not(#nav-toggle-wrap) {
-      display: none !important;
-    }
-
-    nav h1 {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #e0e0e0;
-      margin-right: auto;
-    }
-
-    /* ── NAV TOGGLE ── */
-    #nav-toggle-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    #nav-toggle-wrap h1-mini {
-      /* shown only when collapsed */
-      display: none;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #aac4ff;
-    }
-
-    nav.collapsed #nav-toggle-wrap h1-mini {
-      display: block;
-    }
-
-    .toggle-btn {
-      padding: 5px 12px;
-      border-radius: 20px;
-      border: 1px solid #0f3460;
-      background: transparent;
-      color: #aac4ff;
-      font-size: 0.78rem;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.2s;
-      flex-shrink: 0;
-    }
-    .toggle-btn:hover { background: #0f3460; }
-
-    /* ── MAP BUTTONS ── */
-    .map-btn {
-      padding: 6px 14px;
-      border-radius: 20px;
-      border: 1px solid #0f3460;
-      background: transparent;
-      color: #aac4ff;
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .map-btn:hover  { background: #0f3460; }
-    .map-btn.active { background: #0f3460; color: #fff; border-color: #4fc3f7; }
-
-    /* ── ZOOM ── */
-    .zoom-controls {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-    }
-
-    .zoom-btn {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      border: 1px solid #0f3460;
-      background: #16213e;
-      color: #aac4ff;
-      font-size: 1.2rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.2s;
-      user-select: none;
-    }
-    .zoom-btn:hover  { background: #0f3460; }
-    .zoom-btn.active { background: #0f3460; border-color: #4fc3f7; color: #fff; }
-
-    /* ── MODE GROUP ── */
-    .mode-group {
-      display: flex;
-      border: 1px solid #0f3460;
-      border-radius: 20px;
-      overflow: hidden;
-    }
-
-    .mode-btn {
-      padding: 6px 14px;
-      border: none;
-      background: transparent;
-      color: #aac4ff;
-      font-size: 0.82rem;
-      cursor: pointer;
-      transition: background 0.2s;
-      user-select: none;
-    }
-    .mode-btn + .mode-btn { border-left: 1px solid #0f3460; }
-    .mode-btn:hover  { background: #0f3460; }
-    .mode-btn.active { background: #0f3460; color: #fff; }
-
-    /* ── D-PAD ── */
-    .dpad {
-      display: grid;
-      grid-template-columns: repeat(3, 32px);
-      grid-template-rows: repeat(3, 32px);
-      gap: 3px;
-    }
-
-    .dpad-btn {
-      width: 32px;
-      height: 32px;
-      border-radius: 6px;
-      border: 1px solid #0f3460;
-      background: #16213e;
-      color: #aac4ff;
-      font-size: 1rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s;
-      user-select: none;
-      touch-action: none;
-    }
-    .dpad-btn:hover  { background: #0f3460; }
-    .dpad-btn:active { background: #1a4a7a; }
-    .dpad-center { font-size: 0.65rem; color: #667; cursor: default; }
-
-    /* ── MAIN CONTENT ── */
-    .chart-container {
-      flex: 1;
-      position: relative;
-      overflow: hidden;
-    }
-
-    iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-      display: block;
-    }
-
-    /* ── LANDING ── */
-    #landing {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 40px 24px;
-    }
-
-    .landing-card {
-      max-width: 640px;
-      width: 100%;
-      background: #16213e;
-      border: 1px solid #0f3460;
-      border-radius: 16px;
-      padding: 40px;
-    }
-    .landing-card h2 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: #4fc3f7;
-      margin-bottom: 16px;
-    }
-    .landing-card p {
-      font-size: 0.95rem;
-      line-height: 1.7;
-      color: #ccc;
-      margin-bottom: 14px;
-    }
-    .landing-card p:last-child { margin-bottom: 0; }
-    .landing-card .hint {
-      margin-top: 28px;
-      padding: 12px 16px;
-      background: #0f3460;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      color: #aac4ff;
-    }
+    body { margin: 0; background: #111; font-family: sans-serif; color: white; }
+    #controls { padding: 10px; display: flex; align-items: center; gap: 12px; }
+    #slider { flex: 1; }
+    #timestamp { min-width: 160px; font-size: 14px; }
+    #map { height: calc(100vh - 60px); }
   </style>
 </head>
 <body>
 
-  <nav id="main-nav">
-    <h1>RMNP Weather Maps</h1>
+<div id="controls">
+  <button id="playBtn">▶ Play</button>
+  <input id="slider" type="range" min="0" max="3" value="0" step="1">
+  <span id="timestamp">Loading...</span>
+</div>
+<div id="map"></div>
 
-    <!-- Map buttons -->
-    <button class="map-btn" onclick="loadMap('downtown_lumpy_ridge.html', this)">Lumpy Ridge</button>
-    <button class="map-btn" onclick="loadMap('lawn_lake_OFRR.html', this)">Mount Ypsilon</button>
-    <button class="map-btn" onclick="loadMap('bear_lake_area.html', this)">Bear Lake Area</button>
-    <button class="map-btn" onclick="loadMap('wild_basin.html', this)">Wild Basin</button>
-    <button class="map-btn" onclick="loadMap('twin_sisters.html', this)">Twin Sisters</button>
-    <button class="map-btn" onclick="loadMap('colorado_source.html', this)">Colorado Source</button>
-    <button class="map-btn" onclick="loadMap('mount_ida.html', this)">Mount Ida</button>
-    <button class="map-btn" onclick="loadMap('east_inlet.html', this)">East Inlet</button>
-    <button class="map-btn" onclick="loadMap('south_never_summer.html', this)">Mount Nimbus</button>
+<script>
 
-    <!-- Mode toggle -->
-    <div class="mode-group" id="nav-mode" style="display:none;">
-      <button class="mode-btn active" id="mode-pan"   onclick="setMode('pan')">✥ Pan</button>
-      <button class="mode-btn"        id="mode-orbit" onclick="setMode('orbit')">↻ Orbit</button>
-    </div>
+// ── Constants ──
+// Trace indices must match insertion order in initFigure():
+//   0-7:   radar dBZ contours (8 levels)
+//   8:     Rain scatter
+//   9:     Mix scatter
+//   10:    Snow scatter
+//   11-24: static traces from static.json (13 traces)
+//   25:    t2 colorbar (from meta.json)
+//   26:    Wind arrows
+//   27:    Hover (t2 + wind speed)
+const TRACE = {
+  DBZ:   { start: 0, count: 8 },
+  RAIN:  8,
+  MIX:   9,
+  SNOW:  10,
+  // 11-23: static traces (13 of them)
+  // 24:    colorbar dummy trace
+  WIND:  25,
+  HOVER: 26,
+};
 
-    <!-- D-pad -->
-    <div class="dpad" id="dpad" style="display:none;">
-      <div></div>
-      <button class="dpad-btn" id="btn-up"    title="Up">▲</button>
-      <div></div>
-      <button class="dpad-btn" id="btn-left"  title="Left">◀</button>
-      <div class="dpad-btn dpad-center" id="dpad-label">PAN</div>
-      <button class="dpad-btn" id="btn-right" title="Right">▶</button>
-      <div></div>
-      <button class="dpad-btn" id="btn-down"  title="Down">▼</button>
-      <div></div>
-    </div>
+const DBZ_COLORS = [
+  'rgb(0,255,0)', 'rgb(0,200,0)', 'rgb(255,255,0)',
+  'rgb(255,165,0)', 'rgb(255,0,0)', 'rgb(180,0,0)',
+  'rgb(255,0,255)', 'rgb(180,0,180)'
+];
 
-    <!-- Zoom -->
-    <div class="zoom-controls" id="nav-zoom" style="display:none;">
-      <button class="zoom-btn" onclick="adjustZoom(-1)" title="Zoom out">−</button>
-      <button class="zoom-btn" onclick="fullReset()"    title="Reset view">⌂</button>
-      <button class="zoom-btn" onclick="adjustZoom(+1)" title="Zoom in">+</button>
-    </div>
+let TOTAL_FRAMES = 4;   // updated from meta.json on load
+const frameCache = {};
+let currentFrame = 0;
+let playing = false;
+let playInterval = null;
+let staticData = null;
+let meta = null;
 
-    <!-- Nav toggle (always visible, always last) -->
-    <div id="nav-toggle-wrap">
-      <h1-mini>RMNP Weather Maps</h1-mini>
-      <button class="toggle-btn" id="nav-toggle" onclick="toggleNav()">▲ Hide nav</button>
-    </div>
-  </nav>
 
-  <div class="chart-container">
-    <div id="landing">
-      <div class="landing-card">
-        <h2>Welcome to Weather Maps</h2>
-        <p>
-          This site hosts interactive 3D weather visualizations generated with Plotly from
-          WRF (Weather Research and Forecasting) model and ML downscaled output for Rocky Mountain National Park.
-        </p>
-        <p>
-          Maps show 10 m wind and 2 m temperature from a machine learning model downscaling a 1 km
-          grid-spacing WRF run to 333 m. Precipitation contours are from the 1 km model and represent 1hr accumulation ending at the forecast time.
-          Use the controls at the top right of the plotly plot window to change between modes (pan/rotate/etc). The site is much easier to use on desktop than mobile at this point unfortunately. Time selection and animation controls are at the bottom of the plotly window.
-        </p>
-        <div class="hint">
-          Select a map area above. Maps take 5-10 seconds to load all frames and allow scrolling. The controls at the top right f the plot window work best for switching between pan/zoom/rotate for both touch and mouse<br>
-        </div>
-      </div>
-    </div>
+// ── fetchFrame: fetch and cache a single frame JSON ──
+async function fetchFrame(i) {
+  if (frameCache[i]) return frameCache[i];
+  const resp = await fetch(`data/frame_${String(i).padStart(2, '0')}.json`);
+  if (!resp.ok) throw new Error(`Frame ${i} not found (HTTP ${resp.status})`);
+  frameCache[i] = await resp.json();
+  return frameCache[i];
+}
 
-    <iframe id="plotly-frame" src="about:blank" style="display:none;"></iframe>
-  </div>
 
-  <script>
-    /* ════════════════════════════════════════════════════
-       STATE
-    ════════════════════════════════════════════════════ */
-    const frame   = document.getElementById('plotly-frame');
-    const landing = document.getElementById('landing');
-    const nav     = document.getElementById('main-nav');
-    let currentMode = 'pan';
-    let navVisible  = true;
+// ── prefetchFrames: fire off background fetches for all frames ──
+function prefetchFrames() {
+  for (let i = 1; i < TOTAL_FRAMES; i++) {
+    fetchFrame(i).catch(err => console.warn(`Prefetch frame ${i}:`, err.message));
+  }
+}
 
-    /* ════════════════════════════════════════════════════
-       NAV COLLAPSE
-    ════════════════════════════════════════════════════ */
-    function toggleNav() {
-      navVisible = !navVisible;
-      nav.classList.toggle('collapsed', !navVisible);
-      document.getElementById('nav-toggle').textContent = navVisible ? '▲ Hide nav' : '▼ Show nav';
-    }
 
-    /* ════════════════════════════════════════════════════
-       MAP SWITCHING
-    ════════════════════════════════════════════════════ */
-    function loadMap(src, btn) {
-      landing.style.display = 'none';
-      frame.style.display   = 'block';
-      frame.src = src;
-      document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('nav-mode').style.display = '';
-      document.getElementById('dpad').style.display     = '';
-      document.getElementById('nav-zoom').style.display = '';
+// ── loadFrame: update all dynamic traces and image layer for frame i ──
+async function loadFrame(i) {
+  let f;
+  try {
+    f = await fetchFrame(i);
+  } catch(err) {
+    console.warn(`Skipping frame ${i}:`, err.message);
+    return;
+  }
+  console.log('Frame', i, 'wind_lats length:', f.wind_lats?.length);
+  console.log('Frame', i, 'wind_lons length:', f.wind_lons?.length);
+  console.log('Sample wind point:', f.wind_lats?.[0], f.wind_lons?.[0]);
 
-      // Re-attach slow-scroll once the iframe loads
-      frame.addEventListener('load', attachSlowScroll, { once: true });
-    }
+// Build parallel arrays for restyle
+const traceIndices = [];
+const restyleData = { lat: [], lon: [], customdata: [] };
 
-    /* ════════════════════════════════════════════════════
-       SLOW MOUSE-WHEEL (mouse desktop fix)
-       Intercept wheel events inside the iframe and replace
-       them with a scaled-down version so zooming isn't
-       so aggressive.
-    ════════════════════════════════════════════════════ */
-    const WHEEL_SCALE = 0.15; // fraction of original delta to forward (lower = slower)
+// Radar
+for (let r = 0; r < 8; r++) {
+  traceIndices.push(r);
+  restyleData.lat.push(f.radar[r]?.lats ?? []);
+  restyleData.lon.push(f.radar[r]?.lons ?? []);
+  restyleData.customdata.push(null);
+}
 
-    function attachSlowScroll() {
-      try {
-        const iframeWin = frame.contentWindow;
-        iframeWin.addEventListener('wheel', onIframeWheel, { passive: false, capture: true });
-      } catch(e) {
-        console.warn('Could not attach slow-scroll (cross-origin?):', e);
-      }
-    }
+// Precip
+[[TRACE.RAIN, f.rain], [TRACE.MIX, f.mix], [TRACE.SNOW, f.snow]].forEach(([idx, d]) => {
+  traceIndices.push(idx);
+  restyleData.lat.push(d?.lats ?? []);
+  restyleData.lon.push(d?.lons ?? []);
+  restyleData.customdata.push(null);
+});
 
-    function onIframeWheel(e) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
+// Wind
+traceIndices.push(TRACE.WIND);
+restyleData.lat.push(f.wind_lats ?? []);
+restyleData.lon.push(f.wind_lons ?? []);
+restyleData.customdata.push(null);
 
-      // Re-dispatch a new event with a smaller delta
-      const scaled = new WheelEvent('wheel', {
-        bubbles:    true,
-        cancelable: true,
-        deltaX:     e.deltaX * WHEEL_SCALE,
-        deltaY:     e.deltaY * WHEEL_SCALE,
-        deltaZ:     e.deltaZ * WHEEL_SCALE,
-        deltaMode:  e.deltaMode,
-        clientX:    e.clientX,
-        clientY:    e.clientY,
-        ctrlKey:    e.ctrlKey,
-        shiftKey:   e.shiftKey,
-        altKey:     e.altKey,
-        metaKey:    e.metaKey,
-      });
-      e.target.dispatchEvent(scaled);
-    }
+// Hover
+traceIndices.push(TRACE.HOVER);
+restyleData.lat.push(f.hover?.lats ?? []);
+restyleData.lon.push(f.hover?.lons ?? []);
+restyleData.customdata.push(
+  (f.hover?.t2 ?? []).map((t, idx) => [t, f.hover.spd[idx], staticData.ter[idx]])
+);
 
-    /* ════════════════════════════════════════════════════
-       MODE
-    ════════════════════════════════════════════════════ */
-    function setMode(mode) {
-      currentMode = mode;
-      document.getElementById('mode-pan').classList.toggle('active',   mode === 'pan');
-      document.getElementById('mode-orbit').classList.toggle('active', mode === 'orbit');
-      document.getElementById('dpad-label').textContent = mode === 'pan' ? 'PAN' : 'ROT';
-    }
+await Plotly.restyle('map', restyleData, traceIndices);
 
-    /* ════════════════════════════════════════════════════
-       PLOTLY HELPERS
-    ════════════════════════════════════════════════════ */
-    function getPlotlyDiv() {
-      try { return frame.contentWindow.document.querySelector('.plotly-graph-div'); }
-      catch(e) { return null; }
-    }
+  // Swap T2 temperature image
+  await Plotly.relayout('map', {
+    'map.layers[1].source': `data:image/webp;base64,${f.t2_img}`,
+    'map.layers[1].coordinates': [
+      [f.bounds.lon_min, f.bounds.lat_max],
+      [f.bounds.lon_max, f.bounds.lat_max],
+      [f.bounds.lon_max, f.bounds.lat_min],
+      [f.bounds.lon_min, f.bounds.lat_min],
+    ],
+  });
 
-    function getCamera() {
-      const gd = getPlotlyDiv();
-      if (!gd) return null;
-      const cam = (gd.layout && gd.layout.scene && gd.layout.scene.camera) || {};
-      return {
-        eye:    cam.eye    || { x: 0, y: -2.0, z: 0.8 },
-        center: cam.center || { x: 0, y:  0,   z: 0   },
-        up:     cam.up     || { x: 0, y:  0,   z: 1   },
-      };
-    }
+  document.getElementById('timestamp').innerText = f.timestamp;
+  currentFrame = i;
+  document.getElementById('slider').value = i;
+}
 
-    const HOME_CAMERA = {
-      eye:    { x: 0, y: -2.0, z: 0.8 },
-      center: { x: 0, y:  0,   z: 0   },
-      up:     { x: 0, y:  0,   z: 1   },
-    };
 
-    /* ── ZOOM (nav buttons) ──
-       adjustZoom(+1) zooms in, (-1) zooms out.
-       Uses the camera eye vector approach but with a gentler factor. */
-    function adjustZoom(dir) {
-      const gd = getPlotlyDiv();
-      if (!gd) return;
-      try {
-        const cam = getCamera();
-        const factor = dir > 0 ? 0.92 : 1.0 / 0.92; // smaller step than before
-        frame.contentWindow.Plotly.relayout(gd, {
-          'scene.camera.eye': {
-            x: cam.eye.x * factor,
-            y: cam.eye.y * factor,
-            z: cam.eye.z * factor,
-          },
-        });
-      } catch(e) { console.warn('Zoom failed:', e); }
-    }
+// ── initFigure: build the Plotly figure with static base + empty dynamic traces ──
+async function initFigure() {
+  console.log('initFigure started');
 
-    function fullReset() {
-      const gd = getPlotlyDiv();
-      if (!gd) return;
-      try { frame.contentWindow.Plotly.relayout(gd, { 'scene.camera': HOME_CAMERA }); }
-      catch(e) {}
-    }
+  // Declare local refs, assign to outer scope variables
+  try {
+    const staticResp = await fetch('data/static.json');
+    console.log('static.json status:', staticResp.status);
+    staticData = await staticResp.json();   // assigns to outer staticData
+    console.log('static.json parsed, traces:', staticData.traces?.length);
+  } catch(e) {
+    console.error('static.json failed:', e);
+    document.getElementById('timestamp').innerText = 'Error loading static.json';
+    return;
+  }
 
-    /* ════════════════════════════════════════════════════
-       D-PAD — camera-space manipulation via Plotly relayout
-       (works on both mouse and touch, no event injection needed)
-    ════════════════════════════════════════════════════ */
+  try {
+    const metaResp = await fetch('data/meta.json');
+    console.log('meta.json status:', metaResp.status);
+    meta = await metaResp.json();           // assigns to outer meta
+    console.log('meta.json parsed, frames:', meta.total_frames);
+    TOTAL_FRAMES = meta.total_frames;
+    document.getElementById('slider').max = TOTAL_FRAMES - 1;
+  } catch(e) {
+    console.error('meta.json failed:', e);
+    document.getElementById('timestamp').innerText = 'Error loading meta.json';
+    return;
+  }
 
-    /*
-     * PAN: shift the camera center (and eye by the same delta) along the
-     *      screen-space axes derived from the current view.
-     * ORBIT: rotate the eye around the center point.
-     *
-     * Screen axes in Plotly's 3D scene:
-     *   Right  ≈ normalise(eye × up)
-     *   Up     ≈ normalise(up component perpendicular to right)
-     * We work entirely in world-space (x,y,z) so no projection is needed.
-     */
+  const traces = [];
 
-    const PAN_AMOUNT   = 0.04; // world-units per d-pad step
-    const ORBIT_AMOUNT = 2;    // degrees per d-pad step
+  // ── Dynamic placeholders: inserted first so indices are stable ──
 
-    function vecLen(v) { return Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z); }
-    function vecNorm(v) { const l=vecLen(v)||1; return {x:v.x/l,y:v.y/l,z:v.z/l}; }
-    function vecAdd(a,b){ return {x:a.x+b.x,y:a.y+b.y,z:a.z+b.z}; }
-    function vecSub(a,b){ return {x:a.x-b.x,y:a.y-b.y,z:a.z-b.z}; }
-    function vecScale(v,s){ return {x:v.x*s,y:v.y*s,z:v.z*s}; }
-    function vecCross(a,b){ return {
-      x: a.y*b.z - a.z*b.y,
-      y: a.z*b.x - a.x*b.z,
-      z: a.x*b.y - a.y*b.x,
-    }; }
-    function vecDot(a,b){ return a.x*b.x + a.y*b.y + a.z*b.z; }
-
-    // Rotate vector v around axis by angleDeg
-    function rotateAround(v, axis, angleDeg) {
-      const a = axis;
-      const θ = angleDeg * Math.PI / 180;
-      const cos = Math.cos(θ), sin = Math.sin(θ);
-      // Rodrigues' rotation formula
-      const dot = vecDot(v, a);
-      const cross = vecCross(a, v);
-      return {
-        x: v.x*cos + cross.x*sin + a.x*dot*(1-cos),
-        y: v.y*cos + cross.y*sin + a.y*dot*(1-cos),
-        z: v.z*cos + cross.z*sin + a.z*dot*(1-cos),
-      };
-    }
-
-    function dpadAction(dirX, dirY) {
-      const gd = getPlotlyDiv();
-      if (!gd) return;
-      try {
-        const cam = getCamera();
-        const eye    = cam.eye;
-        const center = cam.center;
-        const up     = cam.up;
-
-        // Vectors in world space
-        const toCenter = vecSub(center, eye);           // eye → center
-        const dist     = vecLen(toCenter);
-        const forward  = vecNorm(toCenter);
-        const right    = vecNorm(vecCross(forward, up));
-        const screenUp = vecNorm(vecCross(right, forward));
-
-        let newEye = eye, newCenter = center;
-
-        if (currentMode === 'pan') {
-          // Move both eye and center in the screen-plane
-          // dirX: left(-1)/right(+1), dirY: up(-1)/down(+1)  [screen convention]
-          const shift = vecAdd(
-            vecScale(right,    dirX * PAN_AMOUNT),
-            vecScale(screenUp, dirY * PAN_AMOUNT * -1), // flip so up-arrow = up on screen
-          );
-          newEye    = vecAdd(eye,    shift);
-          newCenter = vecAdd(center, shift);
-        } else {
-          // Orbit: rotate the eye around the center
-          // Horizontal orbit → rotate around world Z (or screenUp)
-          // Vertical orbit   → rotate around right axis
-          const relEye = vecSub(eye, center); // eye relative to center
-
-          let rotated = relEye;
-          if (dirX !== 0) {
-            rotated = rotateAround(rotated, {x:0,y:0,z:1}, -dirX * ORBIT_AMOUNT);
-          }
-          if (dirY !== 0) {
-            rotated = rotateAround(rotated, right, dirY * ORBIT_AMOUNT);
-          }
-          newEye = vecAdd(center, rotated);
-        }
-
-        frame.contentWindow.Plotly.relayout(gd, {
-          'scene.camera': {
-            eye:    newEye,
-            center: newCenter,
-            up:     up,
-          },
-        });
-      } catch(e) { console.warn('D-pad action failed:', e); }
-    }
-
-    // Wire up d-pad buttons
-    // [dx, dy] in screen space: right=+x, up=+y (we'll flip inside dpadAction)
-    const dpadMap = {
-      'btn-up':    [ 0, +1],
-      'btn-down':  [ 0, -1],
-      'btn-left':  [-1,  0],
-      'btn-right': [+1,  0],
-    };
-
-    Object.entries(dpadMap).forEach(([id, [dx, dy]]) => {
-      const btn = document.getElementById(id);
-      let holdTimer = null, holdInterval = null;
-
-      const fire = () => dpadAction(dx, dy);
-
-      const startHold = () => {
-        fire();
-        holdTimer = setTimeout(() => {
-          holdInterval = setInterval(fire, 80);
-        }, 300);
-      };
-
-      const stopHold = () => {
-        clearTimeout(holdTimer);
-        clearInterval(holdInterval);
-        holdTimer = null;
-        holdInterval = null;
-      };
-
-      btn.addEventListener('click', fire);
-      btn.addEventListener('touchstart', e => { e.preventDefault(); startHold(); }, { passive: false });
-      btn.addEventListener('touchend',   stopHold, { passive: true });
-      btn.addEventListener('mousedown',  startHold);
-      btn.addEventListener('mouseup',    stopHold);
-      btn.addEventListener('mouseleave', stopHold);
+  // Radar dBZ contours: indices 0-7
+  const levels = [10, 20, 30, 40, 50, 60, 70, 80];
+  levels.forEach((lvl, i) => {
+    traces.push({
+      type: 'scattermap', mode: 'lines',
+      lat: [], lon: [],
+      line: { color: DBZ_COLORS[i], width: 2 },
+      name: `${lvl} dBZ`,
+      hoverinfo: 'skip',
+      showlegend: true,
     });
+  });
 
-    /* ════════════════════════════════════════════════════
-       TOUCH GESTURES ON THE MAP (pinch-zoom + one-finger drag)
-       Operates directly on the Plotly camera — no event injection.
-    ════════════════════════════════════════════════════ */
+  // Precip type scatters: indices 8, 9, 10
+  traces.push({
+    type: 'scattermap', mode: 'markers',
+    lat: [], lon: [],
+    marker: { size: 4, color: 'chartreuse' },
+    name: 'Rain', showlegend: true, hoverinfo: 'skip',
+  });
+  traces.push({
+    type: 'scattermap', mode: 'markers',
+    lat: [], lon: [],
+    marker: { size: 4, color: 'mediumvioletred' },
+    name: 'Mix', showlegend: true, hoverinfo: 'skip',
+  });
+  traces.push({
+    type: 'scattermap', mode: 'markers',
+    lat: [], lon: [],
+    marker: { size: 4, color: 'blue' },
+    name: 'Snow', showlegend: true, hoverinfo: 'skip',
+  });
 
-    let touch1 = null, touch2 = null;
-    let lastPinchDist = null;
+  // ── Static traces from static.json: indices 11 to 11+N-1 ──
+  staticData.traces.forEach(t => traces.push(t));
 
-    function touchMid(t1, t2) {
-      return { x: (t1.clientX+t2.clientX)/2, y: (t1.clientY+t2.clientY)/2 };
-    }
-    function touchDist(t1, t2) {
-      const dx = t1.clientX-t2.clientX, dy = t1.clientY-t2.clientY;
-      return Math.sqrt(dx*dx+dy*dy);
-    }
+  // ── T2 colorbar dummy trace from meta.json ──
+  traces.push(meta.t2_colorbar_trace);
 
-    // Single-finger drag sensitivity (world-units per pixel)
-    const DRAG_SENS   = 0.003;
-    // Pinch zoom sensitivity
-    const PINCH_SENS  = 0.01;
+  // ── Wind arrows placeholder ──
+  traces.push({
+    type: 'scattermap', mode: 'lines',
+    lat: [], lon: [],
+    line: { color: 'black', width: 1.5 },
+    name: 'Wind', showlegend: true, hoverinfo: 'skip',
+  });
 
-    frame.addEventListener('touchstart', e => {
-      e.preventDefault();
-      if (e.touches.length === 1) {
-        touch1 = e.touches[0];
-        touch2 = null;
-        lastPinchDist = null;
-      } else if (e.touches.length === 2) {
-        touch1 = e.touches[0];
-        touch2 = e.touches[1];
-        lastPinchDist = touchDist(touch1, touch2);
-      }
-    }, { passive: false });
+  // ── Hover placeholder (invisible markers carrying t2 + wind speed) ──
+  traces.push({
+    type: 'scattermap', mode: 'markers',
+    lat: [], lon: [],
+    marker: { size: 1, color: 'black', opacity: 0 },
+    name: 't2 hovertext',
+    showlegend: false,
+    opacity: 0,
+    customdata: [],
+    hovertemplate:
+      '2m Temp: %{customdata[0]:.0f}°F<br>' +
+      '10m Wnd: %{customdata[1]:.0f} mph<br>' +
+      'Elev: %{customdata[2]:.0f} ft' +
+      '<extra></extra>',
+  });
 
-    frame.addEventListener('touchmove', e => {
-      e.preventDefault();
-      if (e.touches.length === 1 && touch1) {
-        const t = e.touches[0];
-        const dx = t.clientX - touch1.clientX;
-        const dy = t.clientY - touch1.clientY;
-        touch1 = t;
+  console.log('Total traces built:', traces.length);
+  console.log('Expected TRACE.WIND:', TRACE.WIND, '  TRACE.HOVER:', TRACE.HOVER);
+  console.log('Actual wind index:', traces.length - 2, '  hover index:', traces.length - 1);
 
-        // One-finger → orbit (same as left-click drag in Plotly)
-        const gd = getPlotlyDiv();
-        if (!gd) return;
-        try {
-          const cam = getCamera();
-          const toCenter = vecSub(cam.center, cam.eye);
-          const forward  = vecNorm(toCenter);
-          const right    = vecNorm(vecCross(forward, cam.up));
+  const layout = {
+    map: {
+      style: 'white-bg',
+      center: { lat: 40.5, lon: -106.0 },
+      zoom: 8,
+      layers: [
+        {
+          below: 'traces',
+          sourcetype: 'raster',
+          sourceattribution: 'USGS',
+          source: [
+            'https://basemap.nationalmap.gov/arcgis/rest/services/' +
+            'USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}'
+          ],
+        },
+        // T2 temperature image — source swapped each frame via relayout
+        {
+          sourcetype: 'image',
+          source: '',
+          opacity: 0.75,
+          below: 'traces',
+          coordinates: [
+            [meta.domain.lon_min, meta.domain.lat_max],
+            [meta.domain.lon_max, meta.domain.lat_max],
+            [meta.domain.lon_max, meta.domain.lat_min],
+            [meta.domain.lon_min, meta.domain.lat_min],
+          ],
+        },
+      ],
+    },
+    margin: { l: 0, r: 0, t: 0, b: 0 },
+    height: window.innerHeight - 60,
+  };
 
-          const relEye = vecSub(cam.eye, cam.center);
-          // Horizontal swipe → rotate around Z
-          let rotated = rotateAround(relEye, {x:0,y:0,z:1}, -dx * 0.3);
-          // Vertical swipe → rotate around right
-          rotated = rotateAround(rotated, right, dy * 0.3);
 
-          frame.contentWindow.Plotly.relayout(gd, {
-            'scene.camera': {
-              eye:    vecAdd(cam.center, rotated),
-              center: cam.center,
-              up:     cam.up,
-            },
-          });
-        } catch(e2) {}
 
-      } else if (e.touches.length === 2) {
-        const t1 = e.touches[0], t2 = e.touches[1];
-        const dist = touchDist(t1, t2);
-        if (lastPinchDist !== null) {
-          const delta = lastPinchDist - dist; // positive = pinch in = zoom out
-          const gd = getPlotlyDiv();
-          if (gd) {
-            try {
-              const cam = getCamera();
-              const factor = 1 + delta * PINCH_SENS;
-              frame.contentWindow.Plotly.relayout(gd, {
-                'scene.camera.eye': {
-                  x: cam.eye.x * factor,
-                  y: cam.eye.y * factor,
-                  z: cam.eye.z * factor,
-                },
-              });
-            } catch(e2) {}
-          }
-        }
-        lastPinchDist = dist;
-        touch1 = t1; touch2 = t2;
-      }
-    }, { passive: false });
+  console.log('Calling Plotly.newPlot...');
+  try {
+    await Plotly.newPlot('map', traces, layout, {
+      responsive: true,
+      scrollZoom: true,
+      displayModeBar: true,
+      displaylogo: false,
+    });
+    console.log('Plotly.newPlot succeeded');
+  } catch(e) {
+    console.error('Plotly.newPlot failed:', e);
+    document.getElementById('timestamp').innerText = 'Error: Plotly failed to render';
+    return;
+  }
+ const mapDiv = document.getElementById('map');
+ console.log('wind trace object:', mapDiv.data[TRACE.WIND]);
 
-    frame.addEventListener('touchend', e => {
-      if (e.touches.length === 0) {
-        touch1 = touch2 = null;
-        lastPinchDist = null;
-      } else if (e.touches.length === 1) {
-        touch1 = e.touches[0];
-        touch2 = null;
-        lastPinchDist = null;
-      }
-    }, { passive: true });
-  </script>
+  console.log('Calling loadFrame(0)...');
+  await loadFrame(0);
+  console.log('loadFrame(0) complete');
 
+  prefetchFrames();
+}
+
+
+// ── Event listeners ──
+document.getElementById('slider').addEventListener('input', e => {
+  loadFrame(parseInt(e.target.value));
+});
+
+document.getElementById('playBtn').addEventListener('click', () => {
+  playing = !playing;
+  document.getElementById('playBtn').innerText = playing ? '⏸ Pause' : '▶ Play';
+  if (playing) {
+    playInterval = setInterval(async () => {
+      const next = (currentFrame + 1) % TOTAL_FRAMES;
+      await loadFrame(next);
+    }, 1000);
+  } else {
+    clearInterval(playInterval);
+  }
+});
+
+
+// ── Entry point ──
+initFigure().catch(err => {
+  console.error('Top-level initFigure error:', err);
+  document.getElementById('timestamp').innerText = 'Error: ' + err.message;
+});
+
+</script>
 </body>
 </html>
