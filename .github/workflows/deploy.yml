@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main  # Change to 'master' if that's your default branch
-    paths:
-      - 'videos/**'
-      - '**.html'
 
   # Allow manual trigger
   workflow_dispatch:
