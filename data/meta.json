@@ -147,14 +147,14 @@
     "2026-07-14 17:45 MDT",
     "2026-07-14 18:00 MDT"
   ],
-  "t2_vmin": 275,
-  "t2_vmax": 305,
+  "t2_vmin": 35,
+  "t2_vmax": 85,
   "t2_colorbar_trace": {
     "type": "heatmap",
     "z": [
       [
-        275,
-        305
+        35,
+        85
       ]
     ],
     "colorscale": [
@@ -207,8 +207,8 @@
         "rgb(252,254,164)"
       ]
     ],
-    "zmin": 275,
-    "zmax": 305,
+    "zmin": 35,
+    "zmax": 85,
     "showscale": true,
     "colorbar": {
       "title": {
@@ -230,10 +230,12 @@
         "color": "white"
       },
       "tickvals": [
-        275,
-        285,
-        295,
-        305
+        35,
+        45,
+        55,
+        65,
+        75,
+        85
       ],
       "bgcolor": "rgba(0,0,0,0.4)",
       "borderwidth": 0
