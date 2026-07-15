@@ -123,6 +123,29 @@ restyleData.customdata.push(
   (f.hover?.t2 ?? []).map((t, idx) => [t, f.hover.spd[idx], staticData.ter[idx]])
 );
 
+function formatTimestamp(raw) {
+  if (!raw) return 'Unknown time';
+
+  const match = raw.match(/(\d{4})-(\d{2})-(\d{2})[_T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return raw;
+
+  const [, year, month, day, hour, minute, second] = match;
+
+  const utcDate = new Date(Date.UTC(
+    +year, +month - 1, +day, +hour, +minute, +(second || 0)
+  ));
+
+  return utcDate.toLocaleString('en-US', {
+    timeZone: 'America/Denver',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
 await Plotly.restyle('map', restyleData, traceIndices);
 
   // Swap T2 temperature image
@@ -136,7 +159,7 @@ await Plotly.restyle('map', restyleData, traceIndices);
     ],
   });
 
-  document.getElementById('timestamp').innerText = f.timestamp;
+  document.getElementById('timestamp').innerText = formatTimestamp(f.timestamp);
   currentFrame = i;
   document.getElementById('slider').value = i;
 }
