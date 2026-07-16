@@ -1,44 +1,212 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
-  <style>
-    body { margin: 0; background: #111; font-family: sans-serif; color: white; }
-    #controls { padding: 10px; display: flex; align-items: center; gap: 12px; }
-    #slider { flex: 1; }
-    #timestamp { min-width: 160px; font-size: 14px; }
-    #map { height: calc(100vh - 60px); }
-  </style>
+<meta charset="UTF-8">
+<title>Weather Dashboard</title>
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #111; font-family: sans-serif; color: white; }
+
+  /* ── Tab bar ── */
+  #tabbar {
+    display: flex;
+    background: #1a1a1a;
+    border-bottom: 1px solid #333;
+  }
+  .tab-btn {
+    padding: 14px 22px;
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 15px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+  }
+  .tab-btn:hover { color: #fff; background: #222; }
+  .tab-btn.active { color: #fff; border-bottom: 3px solid #4da3ff; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Radar tab ── */
+  #controls { padding: 10px; display: flex; align-items: center; gap: 12px; }
+  #slider { flex: 1; }
+  #timestamp { min-width: 160px; font-size: 14px; }
+  #map { height: calc(100vh - 110px); }
+
+  /* ── Image gallery tabs ── */
+  .gallery {
+    padding: 16px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  .gallery-item {
+    margin-bottom: 24px;
+  }
+  .gallery-item img {
+    width: 100%;
+    display: block;
+    border-radius: 6px;
+    border: 1px solid #333;
+  }
+  .gallery-caption {
+    padding: 8px 4px;
+    font-size: 13px;
+    color: #aaa;
+  }
+  .gallery-status {
+    padding: 40px;
+    text-align: center;
+    color: #888;
+  }
+</style>
 </head>
 <body>
 
-<div id="controls">
-  <button id="playBtn">▶ Play</button>
-  <input id="slider" type="range" min="0" max="3" value="0" step="1">
-  <span id="timestamp">Loading...</span>
+<div id="tabbar">
+  <button class="tab-btn active" data-tab="radar">Forecast Map</button>
+  <button class="tab-btn" data-tab="setA">Point Forecasts</button>
+  <button class="tab-btn" data-tab="setB">Verification</button>
 </div>
-<div id="map"></div>
+
+<!-- ── Radar Loop tab ── -->
+<div id="tab-radar" class="tab-panel active">
+  <div id="controls">
+    <button id="playBtn">▶ Play</button>
+    <input id="slider" type="range" min="0" max="3" value="0" step="1">
+    <span id="timestamp">Loading...</span>
+  </div>
+  <div id="map"></div>
+</div>
+
+<!-- ── Image Set A tab ── -->
+<div id="tab-setA" class="tab-panel">
+  <div id="gallery-setA" class="gallery">
+    <div class="gallery-status">Loading Images/ ...</div>
+  </div>
+</div>
+
+<!-- ── Image Set B tab ── -->
+<div id="tab-setB" class="tab-panel">
+  <div id="gallery-setB" class="gallery">
+    <div class="gallery-status">Loading Images/ ...</div>
+  </div>
+</div>
 
 <script>
 
-// ── Constants ──
-// Trace indices must match insertion order in initFigure():
-//   0-7:   radar dBZ contours (8 levels)
-//   8:     Rain scatter
-//   9:     Mix scatter
-//   10:    Snow scatter
-//   11-24: static traces from static.json (13 traces)
-//   25:    t2 colorbar (from meta.json)
-//   26:    Wind arrows
-//   27:    Hover (t2 + wind speed)
+// ============================================================
+// Tab switching
+// ============================================================
+const tabButtons = document.querySelectorAll('.tab-btn');
+const tabPanels = {
+  radar: document.getElementById('tab-radar'),
+  setA: document.getElementById('tab-setA'),
+  setB: document.getElementById('tab-setB'),
+};
+
+let radarInitialized = false;
+let galleryLoaded = { setA: false, setB: false };
+
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.tab;
+
+    tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+    Object.entries(tabPanels).forEach(([key, panel]) => {
+      panel.classList.toggle('active', key === target);
+    });
+
+    // Lazy-init each tab's content the first time it's shown
+    if (target === 'radar' && !radarInitialized) {
+      radarInitialized = true;
+      initFigure().catch(err => {
+        console.error('Top-level initFigure error:', err);
+        document.getElementById('timestamp').innerText = 'Error: ' + err.message;
+      });
+    }
+    if ((target === 'setA' || target === 'setB') && !galleryLoaded[target]) {
+      galleryLoaded[target] = true;
+      const folder = target === 'setA' ? 'imagesA' : 'imagesB';
+      loadGallery(folder, `gallery-${target}`);
+    }
+
+    // Plotly needs a resize nudge if it was hidden when drawn
+    if (target === 'radar' && radarInitialized) {
+      window.dispatchEvent(new Event('resize'));
+    }
+  });
+});
+
+// ============================================================
+// Image gallery: auto-scan a folder for sequentially numbered PNGs
+// Tries 001.png, 002.png, ... and stops after several consecutive misses.
+// Adjust `pad`, `ext`, or `startAt` below if your filenames differ.
+// ============================================================
+async function loadGallery(folder, containerId) {
+  const container = document.getElementById(containerId);
+  const pad = 3;          // filename padding, e.g. 001.png
+  const ext = 'png';
+  const maxConsecutiveMisses = 5;
+  const hardCap = 500;     // safety stop
+
+  const found = [];
+  let misses = 0;
+
+  for (let i = 1; i <= hardCap; i++) {
+    const name = `${String(i).padStart(pad, '0')}.${ext}`;
+    const url = `${folder}/${name}`;
+    const ok = await imageExists(url);
+    if (ok) {
+      found.push(url);
+      misses = 0;
+    } else {
+      misses++;
+      if (misses >= maxConsecutiveMisses) break;
+    }
+  }
+
+  container.innerHTML = '';
+
+  if (found.length === 0) {
+    container.innerHTML = `<div class="gallery-status">No images found in ${folder}/ (expected files like 001.png, 002.png, ...)</div>`;
+    return;
+  }
+
+  found.forEach(url => {
+    const item = document.createElement('div');
+    item.className = 'gallery-item';
+    const img = document.createElement('img');
+    img.src = url;
+    img.loading = 'lazy';
+    item.appendChild(img);
+    const caption = document.createElement('div');
+    caption.className = 'gallery-caption';
+    caption.textContent = url.split('/').pop();
+    item.appendChild(caption);
+    container.appendChild(item);
+  });
+}
+
+function imageExists(url) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
+// ============================================================
+// Radar loop (Plotly) — unchanged logic, wrapped for lazy init
+// ============================================================
+
 const TRACE = {
   DBZ:   { start: 0, count: 8 },
   RAIN:  8,
   MIX:   9,
   SNOW:  10,
-  // 11-23: static traces (13 of them)
-  // 24:    colorbar dummy trace
   WIND:  25,
   HOVER: 26,
 };
@@ -49,7 +217,7 @@ const DBZ_COLORS = [
   'rgb(255,0,255)', 'rgb(180,0,180)'
 ];
 
-let TOTAL_FRAMES = 145;   // updated from meta.json on load
+let TOTAL_FRAMES = 145;
 const frameCache = {};
 let currentFrame = 0;
 let playing = false;
@@ -57,26 +225,20 @@ let playInterval = null;
 let staticData = null;
 let meta = null;
 
-
-// ── fetchFrame: fetch and cache a single frame JSON ──
 async function fetchFrame(i) {
   if (frameCache[i]) return frameCache[i];
-  const resp = await fetch(`data/frame_${String(i).padStart(3, '0')}.json`);
+  const resp = await fetch(`data/frame_${String(i).padStart(2, '0')}.json`);
   if (!resp.ok) throw new Error(`Frame ${i} not found (HTTP ${resp.status})`);
   frameCache[i] = await resp.json();
   return frameCache[i];
 }
 
-
-// ── prefetchFrames: fire off background fetches for all frames ──
 function prefetchFrames() {
   for (let i = 1; i < TOTAL_FRAMES; i++) {
     fetchFrame(i).catch(err => console.warn(`Prefetch frame ${i}:`, err.message));
   }
 }
 
-
-// ── loadFrame: update all dynamic traces and image layer for frame i ──
 async function loadFrame(i) {
   let f;
   try {
@@ -85,70 +247,38 @@ async function loadFrame(i) {
     console.warn(`Skipping frame ${i}:`, err.message);
     return;
   }
-  console.log('Frame', i, 'wind_lats length:', f.wind_lats?.length);
-  console.log('Frame', i, 'wind_lons length:', f.wind_lons?.length);
-  console.log('Sample wind point:', f.wind_lats?.[0], f.wind_lons?.[0]);
 
-// Build parallel arrays for restyle
-const traceIndices = [];
-const restyleData = { lat: [], lon: [], customdata: [] };
+  const traceIndices = [];
+  const restyleData = { lat: [], lon: [], customdata: [] };
 
-// Radar
-for (let r = 0; r < 8; r++) {
-  traceIndices.push(r);
-  restyleData.lat.push(f.radar[r]?.lats ?? []);
-  restyleData.lon.push(f.radar[r]?.lons ?? []);
-  restyleData.customdata.push(null);
-}
+  for (let r = 0; r < 8; r++) {
+    traceIndices.push(r);
+    restyleData.lat.push(f.radar[r]?.lats ?? []);
+    restyleData.lon.push(f.radar[r]?.lons ?? []);
+    restyleData.customdata.push(null);
+  }
 
-// Precip
-[[TRACE.RAIN, f.rain], [TRACE.MIX, f.mix], [TRACE.SNOW, f.snow]].forEach(([idx, d]) => {
-  traceIndices.push(idx);
-  restyleData.lat.push(d?.lats ?? []);
-  restyleData.lon.push(d?.lons ?? []);
-  restyleData.customdata.push(null);
-});
-
-// Wind
-traceIndices.push(TRACE.WIND);
-restyleData.lat.push(f.wind_lats ?? []);
-restyleData.lon.push(f.wind_lons ?? []);
-restyleData.customdata.push(null);
-
-// Hover
-traceIndices.push(TRACE.HOVER);
-restyleData.lat.push(f.hover?.lats ?? []);
-restyleData.lon.push(f.hover?.lons ?? []);
-restyleData.customdata.push(
-  (f.hover?.t2 ?? []).map((t, idx) => [t, f.hover.spd[idx], staticData.ter[idx]])
-);
-
-function formatTimestamp(raw) {
-  if (!raw) return 'Unknown time';
-
-  const match = raw.match(/(\d{4})-(\d{2})-(\d{2})[_T](\d{2}):(\d{2})(?::(\d{2}))?/);
-  if (!match) return raw;
-
-  const [, year, month, day, hour, minute, second] = match;
-
-  const utcDate = new Date(Date.UTC(
-    +year, +month - 1, +day, +hour, +minute, +(second || 0)
-  ));
-
-  return utcDate.toLocaleString('en-US', {
-    timeZone: 'America/Denver',
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short',
+  [[TRACE.RAIN, f.rain], [TRACE.MIX, f.mix], [TRACE.SNOW, f.snow]].forEach(([idx, d]) => {
+    traceIndices.push(idx);
+    restyleData.lat.push(d?.lats ?? []);
+    restyleData.lon.push(d?.lons ?? []);
+    restyleData.customdata.push(null);
   });
-}
 
-await Plotly.restyle('map', restyleData, traceIndices);
+  traceIndices.push(TRACE.WIND);
+  restyleData.lat.push(f.wind_lats ?? []);
+  restyleData.lon.push(f.wind_lons ?? []);
+  restyleData.customdata.push(null);
 
-  // Swap T2 temperature image
+  traceIndices.push(TRACE.HOVER);
+  restyleData.lat.push(f.hover?.lats ?? []);
+  restyleData.lon.push(f.hover?.lons ?? []);
+  restyleData.customdata.push(
+    (f.hover?.t2 ?? []).map((t, idx) => [t, f.hover.spd[idx], staticData.ter[idx]])
+  );
+
+  await Plotly.restyle('map', restyleData, traceIndices);
+
   await Plotly.relayout('map', {
     'map.layers[1].source': `data:image/webp;base64,${f.t2_img}`,
     'map.layers[1].coordinates': [
@@ -159,22 +289,15 @@ await Plotly.restyle('map', restyleData, traceIndices);
     ],
   });
 
-  document.getElementById('timestamp').innerText = formatTimestamp(f.timestamp);
+  document.getElementById('timestamp').innerText = f.timestamp;
   currentFrame = i;
   document.getElementById('slider').value = i;
 }
 
-
-// ── initFigure: build the Plotly figure with static base + empty dynamic traces ──
 async function initFigure() {
-  console.log('initFigure started');
-
-  // Declare local refs, assign to outer scope variables
   try {
     const staticResp = await fetch('data/static.json');
-    console.log('static.json status:', staticResp.status);
-    staticData = await staticResp.json();   // assigns to outer staticData
-    console.log('static.json parsed, traces:', staticData.traces?.length);
+    staticData = await staticResp.json();
   } catch(e) {
     console.error('static.json failed:', e);
     document.getElementById('timestamp').innerText = 'Error loading static.json';
@@ -183,9 +306,7 @@ async function initFigure() {
 
   try {
     const metaResp = await fetch('data/meta.json');
-    console.log('meta.json status:', metaResp.status);
-    meta = await metaResp.json();           // assigns to outer meta
-    console.log('meta.json parsed, frames:', meta.total_frames);
+    meta = await metaResp.json();
     TOTAL_FRAMES = meta.total_frames;
     document.getElementById('slider').max = TOTAL_FRAMES - 1;
   } catch(e) {
@@ -196,9 +317,6 @@ async function initFigure() {
 
   const traces = [];
 
-  // ── Dynamic placeholders: inserted first so indices are stable ──
-
-  // Radar dBZ contours: indices 0-7
   const levels = [10, 20, 30, 40, 50, 60, 70, 80];
   levels.forEach((lvl, i) => {
     traces.push({
@@ -211,41 +329,16 @@ async function initFigure() {
     });
   });
 
-  // Precip type scatters: indices 8, 9, 10
-  traces.push({
-    type: 'scattermap', mode: 'markers',
-    lat: [], lon: [],
-    marker: { size: 4, color: 'chartreuse' },
-    name: 'Rain', showlegend: true, hoverinfo: 'skip',
-  });
-  traces.push({
-    type: 'scattermap', mode: 'markers',
-    lat: [], lon: [],
-    marker: { size: 4, color: 'mediumvioletred' },
-    name: 'Mix', showlegend: true, hoverinfo: 'skip',
-  });
-  traces.push({
-    type: 'scattermap', mode: 'markers',
-    lat: [], lon: [],
-    marker: { size: 4, color: 'blue' },
-    name: 'Snow', showlegend: true, hoverinfo: 'skip',
-  });
+  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'chartreuse' }, name: 'Rain', showlegend: true, hoverinfo: 'skip' });
+  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'mediumvioletred' }, name: 'Mix', showlegend: true, hoverinfo: 'skip' });
+  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'blue' }, name: 'Snow', showlegend: true, hoverinfo: 'skip' });
 
-  // ── Static traces from static.json: indices 11 to 11+N-1 ──
   staticData.traces.forEach(t => traces.push(t));
 
-  // ── T2 colorbar dummy trace from meta.json ──
   traces.push(meta.t2_colorbar_trace);
 
-  // ── Wind arrows placeholder ──
-  traces.push({
-    type: 'scattermap', mode: 'lines',
-    lat: [], lon: [],
-    line: { color: 'black', width: 1.5 },
-    name: 'Wind', showlegend: true, hoverinfo: 'skip',
-  });
+  traces.push({ type: 'scattermap', mode: 'lines', lat: [], lon: [], line: { color: 'black', width: 1.5 }, name: 'Wind', showlegend: true, hoverinfo: 'skip' });
 
-  // ── Hover placeholder (invisible markers carrying t2 + wind speed) ──
   traces.push({
     type: 'scattermap', mode: 'markers',
     lat: [], lon: [],
@@ -260,10 +353,6 @@ async function initFigure() {
       'Elev: %{customdata[2]:.0f} ft' +
       '<extra></extra>',
   });
-
-  console.log('Total traces built:', traces.length);
-  console.log('Expected TRACE.WIND:', TRACE.WIND, '  TRACE.HOVER:', TRACE.HOVER);
-  console.log('Actual wind index:', traces.length - 2, '  hover index:', traces.length - 1);
 
   const layout = {
     map: {
@@ -280,7 +369,6 @@ async function initFigure() {
             'USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}'
           ],
         },
-        // T2 temperature image — source swapped each frame via relayout
         {
           sourcetype: 'image',
           source: '',
@@ -296,12 +384,9 @@ async function initFigure() {
       ],
     },
     margin: { l: 0, r: 0, t: 0, b: 0 },
-    height: window.innerHeight - 60,
+    height: window.innerHeight - 110,
   };
 
-
-
-  console.log('Calling Plotly.newPlot...');
   try {
     await Plotly.newPlot('map', traces, layout, {
       responsive: true,
@@ -309,24 +394,16 @@ async function initFigure() {
       displayModeBar: true,
       displaylogo: false,
     });
-    console.log('Plotly.newPlot succeeded');
   } catch(e) {
     console.error('Plotly.newPlot failed:', e);
     document.getElementById('timestamp').innerText = 'Error: Plotly failed to render';
     return;
   }
- const mapDiv = document.getElementById('map');
- console.log('wind trace object:', mapDiv.data[TRACE.WIND]);
 
-  console.log('Calling loadFrame(0)...');
   await loadFrame(0);
-  console.log('loadFrame(0) complete');
-
   prefetchFrames();
 }
 
-
-// ── Event listeners ──
 document.getElementById('slider').addEventListener('input', e => {
   loadFrame(parseInt(e.target.value));
 });
@@ -344,8 +421,8 @@ document.getElementById('playBtn').addEventListener('click', () => {
   }
 });
 
-
-// ── Entry point ──
+// Init the radar tab immediately since it's the default active tab
+radarInitialized = true;
 initFigure().catch(err => {
   console.error('Top-level initFigure error:', err);
   document.getElementById('timestamp').innerText = 'Error: ' + err.message;
