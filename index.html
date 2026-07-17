@@ -227,7 +227,7 @@ let meta = null;
 
 async function fetchFrame(i) {
   if (frameCache[i]) return frameCache[i];
-  const resp = await fetch(`data/frame_${String(i).padStart(2, '0')}.json`);
+  const resp = await fetch(`data/frame_${String(i).padStart(3, '0')}.json`);
   if (!resp.ok) throw new Error(`Frame ${i} not found (HTTP ${resp.status})`);
   frameCache[i] = await resp.json();
   return frameCache[i];
