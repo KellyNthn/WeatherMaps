@@ -30,10 +30,11 @@
   .tab-panel.active { display: block; }
 
   /* ── Radar tab ── */
-  #controls { padding: 10px; display: flex; align-items: center; gap: 12px; }
+  #controls, .controls { padding: 10px; display: flex; align-items: center; gap: 12px; }
   #slider { flex: 1; }
   #timestamp { min-width: 160px; font-size: 14px; }
   #map { height: calc(100vh - 110px); }
+  #cldmap { height: calc(100vh - 110px); }
 
   /* ── Image gallery tabs ── */
   .gallery {
@@ -60,14 +61,72 @@
     text-align: center;
     color: #888;
   }
+
+  /* ── About / landing page ── */
+  #tab-about {
+    padding: 32px 20px 60px;
+  }
+  .about-content {
+    max-width: 820px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+  .about-content h1 {
+    font-size: 26px;
+    margin-bottom: 6px;
+  }
+  .about-content h2 {
+    font-size: 18px;
+    margin-top: 32px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 6px;
+  }
+  .about-content p {
+    color: #ccc;
+    font-size: 15px;
+  }
+  .about-content .subtitle {
+    color: #888;
+    margin-bottom: 24px;
+  }
 </style>
 </head>
 <body>
 
 <div id="tabbar">
-  <button class="tab-btn active" data-tab="radar">Forecast Map</button>
+  <button class="tab-btn" data-tab="about">About</button>
+  <button class="tab-btn active" data-tab="radar">Surface Map</button>
+  <button class="tab-btn" data-tab="cldltg">Lightning &amp; Clouds</button>
   <button class="tab-btn" data-tab="setA">Point Forecasts</button>
   <button class="tab-btn" data-tab="setB">Verification</button>
+</div>
+
+<!-- ── About / landing page tab ── -->
+<div id="tab-about" class="tab-panel">
+  <div class="about-content">
+    <h1>Rocky Mountain National Park High-Res Forecasts</h1>
+    <p class="subtitle">And other sundry odds and ends I'm interested in</p>
+
+    <h2>What this site shows</h2>
+    <p>
+      This dashboard displayss high resolution (333m temperature and wind; 1km everything else) forecasts for Rocky Mountain National Park (333m resolution) and the surrounding area (1km resolution).
+      Surface Map tab: 2m Temperature (fill); 10m Wind (arrows); Simulated composite radar reflectivity (contour); Precipitation type (dots)
+      Lightning and Clouds tab: Vertically summed cloud cover (fill), hover over the map to see cloud cover percentage at each layer of the atmosphere at that point; Lightning Potential Index after Lynn and Yair 2010 (contour).
+      Point forecasts: Meteograms of points of interest within Rocky Mountain National Park
+      Verification: Comparison of yesterday's forecast to observations and the 333m high resolution dynamical forecast run
+    </p>
+
+    <h2>Methodology</h2>
+    <p>
+      A machine learning model is used to produce the surface temperature and wind forecasts on the inner domain. This model is trained using WRF forecasts of this grid as target data, and data from the 1km run as input data. For the rest of the data, the 1km WRF weather model run is used. Lightning Potential Index is displayed after going through maximum and gaussian filters to account for the fact that lightning can travel many miles from where the strike originates. 
+    </p>
+
+    <h2>Limitations</h2>
+    <p>
+      1. The current model is running on well out of season training data - fix coming soon
+      2. The machine learning model is designed to provide forecasts for remote locations with unique microclimates due to steep terrain. Due to a lack of observations in these areas, the model is predicting the result of a higher resolution WRF run, rather than direct observations. This means that systemic model biases that show up at both 1km and 333m grid spacing will not be corrected for by the machine learning model. The machine learning model results are a downscaled version of the 1km forecast, not an independent forecast in and of themselves.   
+    </p>
+  </div>
 </div>
 
 <!-- ── Radar Loop tab ── -->
@@ -78,6 +137,16 @@
     <span id="timestamp">Loading...</span>
   </div>
   <div id="map"></div>
+</div>
+
+<!-- ── Lightning Risk / Cloud Cover tab ── -->
+<div id="tab-cldltg" class="tab-panel">
+  <div class="controls" id="cldControls">
+    <button id="cldPlayBtn">▶ Play</button>
+    <input id="cldSlider" type="range" min="0" max="3" value="0" step="1">
+    <span id="cldTimestamp">Loading...</span>
+  </div>
+  <div id="cldmap"></div>
 </div>
 
 <!-- ── Image Set A tab ── -->
@@ -101,12 +170,15 @@
 // ============================================================
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = {
+  about: document.getElementById('tab-about'),
   radar: document.getElementById('tab-radar'),
+  cldltg: document.getElementById('tab-cldltg'),
   setA: document.getElementById('tab-setA'),
   setB: document.getElementById('tab-setB'),
 };
 
 let radarInitialized = false;
+let cldLtgInitialized = false;
 let galleryLoaded = { setA: false, setB: false };
 
 tabButtons.forEach(btn => {
@@ -126,6 +198,13 @@ tabButtons.forEach(btn => {
         document.getElementById('timestamp').innerText = 'Error: ' + err.message;
       });
     }
+    if (target === 'cldltg' && !cldLtgInitialized) {
+      cldLtgInitialized = true;
+      initCldLtgFigure().catch(err => {
+        console.error('Top-level initCldLtgFigure error:', err);
+        document.getElementById('cldTimestamp').innerText = 'Error: ' + err.message;
+      });
+    }
     if ((target === 'setA' || target === 'setB') && !galleryLoaded[target]) {
       galleryLoaded[target] = true;
       const folder = target === 'setA' ? 'imagesA' : 'imagesB';
@@ -134,6 +213,9 @@ tabButtons.forEach(btn => {
 
     // Plotly needs a resize nudge if it was hidden when drawn
     if (target === 'radar' && radarInitialized) {
+      window.dispatchEvent(new Event('resize'));
+    }
+    if (target === 'cldltg' && cldLtgInitialized) {
       window.dispatchEvent(new Event('resize'));
     }
   });
@@ -286,7 +368,7 @@ async function loadFrame(i) {
     traceIndices.push(idx);
     restyleData.lat.push(d?.lats ?? []);
     restyleData.lon.push(d?.lons ?? []);
-    restyleData.customdata.push(null);
+    restyleData.customdata.push(d?.dbz ?? []);
   });
 
   traceIndices.push(TRACE.WIND);
@@ -353,9 +435,9 @@ async function initFigure() {
     });
   });
 
-  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'chartreuse' }, name: 'Rain', showlegend: true, hoverinfo: 'skip' });
-  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'mediumvioletred' }, name: 'Mix', showlegend: true, hoverinfo: 'skip' });
-  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'blue' }, name: 'Snow', showlegend: true, hoverinfo: 'skip' });
+  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'chartreuse' }, name: 'Rain', showlegend: true, customdata: [], hovertemplate: 'Sim. Radar: %{customdata:.0f} dBZ<extra></extra>' });
+  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'mediumvioletred' }, name: 'Mix', showlegend: true, customdata: [], hovertemplate: 'Sim. Radar: %{customdata:.0f} dBZ<extra></extra>' });
+  traces.push({ type: 'scattermap', mode: 'markers', lat: [], lon: [], marker: { size: 4, color: 'blue' }, name: 'Snow', showlegend: true, customdata: [], hovertemplate: 'Sim. Radar: %{customdata:.0f} dBZ<extra></extra>' });
 
   staticData.traces.forEach(t => traces.push(t));
 
@@ -428,17 +510,46 @@ async function initFigure() {
   prefetchFrames();
 }
 
+// Rapid slider drags (especially touch input on mobile) fire many 'input'
+// events per second. Rendering every one of them queues up full
+// fetch + restyle + relayout cycles faster than the device can finish them,
+// which is what causes the lag. Instead, track only the latest requested
+// frame and let a single in-flight render loop "catch up" to it, skipping
+// any intermediate frames that were superseded before they could render.
+let radarLatestRequested = 0;
+let radarRenderLoopRunning = false;
+
+function requestRadarFrame(i) {
+  radarLatestRequested = i;
+
+  // Instant, cheap feedback: update the timestamp label from meta (already
+  // in memory) without waiting on any fetch/restyle/relayout.
+  if (meta?.timestamps?.[i]) {
+    document.getElementById('timestamp').innerText = formatTimestamp(meta.timestamps[i]);
+  }
+
+  if (radarRenderLoopRunning) return; // a render is already in flight; it will pick up the latest request when it finishes
+  radarRenderLoopRunning = true;
+  (async () => {
+    while (radarLatestRequested !== currentFrame) {
+      const target = radarLatestRequested;
+      await loadFrame(target);
+    }
+    radarRenderLoopRunning = false;
+  })();
+}
+
 document.getElementById('slider').addEventListener('input', e => {
-  loadFrame(parseInt(e.target.value));
+  requestRadarFrame(parseInt(e.target.value));
 });
 
 document.getElementById('playBtn').addEventListener('click', () => {
   playing = !playing;
   document.getElementById('playBtn').innerText = playing ? '⏸ Pause' : '▶ Play';
   if (playing) {
-    playInterval = setInterval(async () => {
+    playInterval = setInterval(() => {
       const next = (currentFrame + 1) % TOTAL_FRAMES;
-      await loadFrame(next);
+      requestRadarFrame(next);
     }, 1000);
   } else {
     clearInterval(playInterval);
@@ -450,6 +561,230 @@ radarInitialized = true;
 initFigure().catch(err => {
   console.error('Top-level initFigure error:', err);
   document.getElementById('timestamp').innerText = 'Error: ' + err.message;
+});
+
+// ============================================================
+// Lightning Risk (LPI) / Cloud Cover tab
+// Frames come from data/cld_ltg_frame_XXX.json + data/cld_ltg_meta.json
+// (written by gen_cld_ltg.py). The basemap/lakes/roads/trails/etc. traces
+// are shared with the radar tab and come from data/static.json.
+// ============================================================
+
+let CLD_TOTAL_FRAMES = 1;
+const cldFrameCache = {};
+let cldCurrentFrame = 0;
+let cldPlaying = false;
+let cldPlayInterval = null;
+let cldStaticData = null;
+let cldMeta = null;
+let CLD_STATIC_TRACE_OFFSET = 0; // set once static traces are known
+const CLD_LPI_LEVEL_COUNT = 7;   // must match LPI_LEVELS in gen_cld_ltg.py
+let CLD_HOVER_TRACE_INDEX = null; // set once during init, after static+colorbar traces
+
+async function fetchCldLtgFrame(i) {
+  if (cldFrameCache[i]) return cldFrameCache[i];
+  const resp = await fetch(`data/cld_ltg_frame_${String(i).padStart(3, '0')}.json`);
+  if (!resp.ok) throw new Error(`Frame ${i} not found (HTTP ${resp.status})`);
+  cldFrameCache[i] = await resp.json();
+  return cldFrameCache[i];
+}
+
+function prefetchCldLtgFrames() {
+  for (let i = 1; i < CLD_TOTAL_FRAMES; i++) {
+    fetchCldLtgFrame(i).catch(err => console.warn(`Prefetch cld/ltg frame ${i}:`, err.message));
+  }
+}
+
+async function loadCldLtgFrame(i) {
+  let f;
+  try {
+    f = await fetchCldLtgFrame(i);
+  } catch (err) {
+    console.warn(`Skipping cld/ltg frame ${i}:`, err.message);
+    return;
+  }
+
+  const traceIndices = [];
+  const restyleData = { lat: [], lon: [], customdata: [] };
+
+  for (let r = 0; r < CLD_LPI_LEVEL_COUNT; r++) {
+    traceIndices.push(r);
+    restyleData.lat.push(f.lpi[r]?.lats ?? []);
+    restyleData.lon.push(f.lpi[r]?.lons ?? []);
+    restyleData.customdata.push(null);
+  }
+
+  if (CLD_HOVER_TRACE_INDEX !== null) {
+    traceIndices.push(CLD_HOVER_TRACE_INDEX);
+    restyleData.lat.push(f.cld_hover?.lats ?? []);
+    restyleData.lon.push(f.cld_hover?.lons ?? []);
+    restyleData.customdata.push(f.cld_hover?.text ?? []);
+  }
+
+  await Plotly.restyle('cldmap', restyleData, traceIndices);
+
+  await Plotly.relayout('cldmap', {
+    'map.layers[1].source': `data:image/webp;base64,${f.cld_img}`,
+    'map.layers[1].coordinates': [
+      [f.bounds.lon_min, f.bounds.lat_max],
+      [f.bounds.lon_max, f.bounds.lat_max],
+      [f.bounds.lon_max, f.bounds.lat_min],
+      [f.bounds.lon_min, f.bounds.lat_min],
+    ],
+  });
+
+  document.getElementById('cldTimestamp').innerText = formatTimestamp(f.timestamp);
+  cldCurrentFrame = i;
+  document.getElementById('cldSlider').value = i;
+}
+
+async function initCldLtgFigure() {
+  try {
+    const staticResp = await fetch('data/static.json');
+    cldStaticData = await staticResp.json();
+  } catch (e) {
+    console.error('static.json failed:', e);
+    document.getElementById('cldTimestamp').innerText = 'Error loading static.json';
+    return;
+  }
+
+  try {
+    const metaResp = await fetch('data/cld_ltg_meta.json');
+    cldMeta = await metaResp.json();
+    CLD_TOTAL_FRAMES = cldMeta.total_frames;
+    document.getElementById('cldSlider').max = CLD_TOTAL_FRAMES - 1;
+  } catch (e) {
+    console.error('cld_ltg_meta.json failed:', e);
+    document.getElementById('cldTimestamp').innerText = 'Error loading cld_ltg_meta.json';
+    return;
+  }
+
+  const traces = [];
+
+  // LPI risk-level legend traces (lat/lon filled in per-frame via restyle)
+  const lpiLabels = cldMeta.lpi_labels;
+  const lpiColors = cldMeta.lpi_colors;
+  lpiLabels.forEach((label, i) => {
+    traces.push({
+      type: 'scattermap', mode: 'lines',
+      lat: [], lon: [],
+      line: { color: lpiColors[i], width: 4 },
+      legendgroup: 'LPI',
+      legendgrouptitle: { text: 'Lightning Risk' },
+      name: label,
+      hoverinfo: 'skip',
+      showlegend: true,
+    });
+  });
+
+  CLD_STATIC_TRACE_OFFSET = traces.length;
+
+  // Shared basemap layers: lakes, boundary, trails, roads, cities,
+  // waterfalls, trailheads -- same static traces used by the radar tab.
+  cldStaticData.traces.forEach(t => traces.push(t));
+
+  // Cloud-fraction colorbar (dummy trace, renders scale only)
+  traces.push(cldMeta.cld_colorbar_trace);
+
+  // Cloud-layer vertical profile hover trace (lat/lon/text filled per-frame)
+  CLD_HOVER_TRACE_INDEX = traces.length;
+  traces.push({
+    type: 'scattermap', mode: 'markers',
+    lat: [], lon: [],
+    marker: { size: 1, color: 'black', opacity: 0 },
+    name: 'cloud hovertext',
+    showlegend: false,
+    opacity: 0,
+    customdata: [],
+    hovertemplate: '%{customdata}<extra></extra>',
+  });
+
+  const layout = {
+    map: {
+      style: 'white-bg',
+      center: { lat: 40.5, lon: -106.0 },
+      zoom: 8,
+      layers: [
+        {
+          below: 'traces',
+          sourcetype: 'raster',
+          sourceattribution: 'USGS',
+          source: [
+            'https://basemap.nationalmap.gov/arcgis/rest/services/' +
+            'USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}'
+          ],
+        },
+        {
+          sourcetype: 'image',
+          source: '',
+          opacity: 0.75,
+          below: 'traces',
+          coordinates: [
+            [cldMeta.domain.lon_min, cldMeta.domain.lat_max],
+            [cldMeta.domain.lon_max, cldMeta.domain.lat_max],
+            [cldMeta.domain.lon_max, cldMeta.domain.lat_min],
+            [cldMeta.domain.lon_min, cldMeta.domain.lat_min],
+          ],
+        },
+      ],
+    },
+    margin: { l: 0, r: 0, t: 0, b: 0 },
+    height: window.innerHeight - 110,
+  };
+
+  try {
+    await Plotly.newPlot('cldmap', traces, layout, {
+      responsive: true,
+      scrollZoom: true,
+      displayModeBar: true,
+      displaylogo: false,
+    });
+  } catch (e) {
+    console.error('Plotly.newPlot (cldmap) failed:', e);
+    document.getElementById('cldTimestamp').innerText = 'Error: Plotly failed to render';
+    return;
+  }
+
+  await loadCldLtgFrame(0);
+  prefetchCldLtgFrames();
+}
+
+let cldLatestRequested = 0;
+let cldRenderLoopRunning = false;
+
+function requestCldLtgFrame(i) {
+  cldLatestRequested = i;
+
+  if (cldMeta?.timestamps?.[i]) {
+    document.getElementById('cldTimestamp').innerText = formatTimestamp(cldMeta.timestamps[i]);
+  }
+
+  if (cldRenderLoopRunning) return;
+  cldRenderLoopRunning = true;
+  (async () => {
+    while (cldLatestRequested !== cldCurrentFrame) {
+      const target = cldLatestRequested;
+      await loadCldLtgFrame(target);
+    }
+    cldRenderLoopRunning = false;
+  })();
+}
+
+document.getElementById('cldSlider').addEventListener('input', e => {
+  requestCldLtgFrame(parseInt(e.target.value));
+});
+
+document.getElementById('cldPlayBtn').addEventListener('click', () => {
+  cldPlaying = !cldPlaying;
+  document.getElementById('cldPlayBtn').innerText = cldPlaying ? '⏸ Pause' : '▶ Play';
+  if (cldPlaying) {
+    cldPlayInterval = setInterval(() => {
+      const next = (cldCurrentFrame + 1) % CLD_TOTAL_FRAMES;
+      requestCldLtgFrame(next);
+    }, 1000);
+  } else {
+    clearInterval(cldPlayInterval);
+  }
 });
 
 </script>
